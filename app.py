@@ -2,8 +2,7 @@ from fastapi import FastAPI, WebSocket, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from binance.spot import Spot
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import asyncio
 import logging
@@ -20,7 +19,6 @@ templates = Jinja2Templates(directory="templates")
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/trading_db')
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 # Binance client configuration
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
@@ -33,20 +31,6 @@ client = Spot(
     api_secret=BINANCE_API_SECRET,
     base_url='https://testnet.binance.vision' if BINANCE_TESTNET else 'https://api.binance.com'
 )
-
-# Example model
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(80), unique=True, nullable=False)
-    email = Column(String(120), unique=True, nullable=False)
-
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-# Create tables
-Base.metadata.create_all(bind=engine)
 
 # Dependency to get DB session
 def get_db():
