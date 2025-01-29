@@ -37,8 +37,10 @@
 
         socket.onmessage = function (event) {
           const data = JSON.parse(event.data);
-          document.getElementById("currentPrice").textContent =
-            `Current BTC/USDT Price: $${parseFloat(data.price).toFixed(2)}`;
+          document.getElementById("currentBtcUsdt").textContent =
+            `Current BTC/USDT Price: $${parseFloat(data.BTCUSDT).toFixed(2)}`;
+          document.getElementById("currentBtcEth").textContent =
+            `Current ETH/USDT Price: $${parseFloat(data.ETHUSDT).toFixed(2)}`;
         };
 
         socket.onerror = function (error) {
@@ -49,7 +51,10 @@
   </head>
   <body>
     <h1>DCA Bot</h1>
-    <h2 id="currentPrice">Waiting for price update...</h2>
+    <p>
+      <div id="currentBtcUsdt">Waiting for price update...</div>
+      <div id="currentBtcEth">Waiting for price update...</div>
+    </p>
     <form id="orderForm" onsubmit="placeOrder(event)">
       <label for="pair">Trading Pair:</label>
       <input type="text" id="pair" name="pair" value="BTCUSDT" required />
