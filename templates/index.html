@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DCA Bot</title>
+    <script>
+      async function placeOrder(event) {
+        event.preventDefault();
+
+        const formData = new FormData(document.getElementById("orderForm"));
+        const payload = {
+          pair: formData.get("pair"),
+          price: formData.get("price"),
+          quantity: formData.get("quantity"),
+        };
+
+        try {
+          const response = await fetch("/order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          const result = await response.json();
+          document.getElementById("result").textContent = response.ok
+            ? `Order placed: ${JSON.stringify(result)}`
+            : `Error: ${result.error}`;
+        } catch (error) {
+          document.getElementById("result").textContent =
+            `Error: ${error.message}`;
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", function () {
+        const socket = new WebSocket("ws://localhost:8000/ws");
+
+        socket.onmessage = function (event) {
+          const data = JSON.parse(event.data);
+          document.getElementById("currentPrice").textContent =
+            `Current BTC/USDT Price: $${parseFloat(data.price).toFixed(2)}`;
+        };
+
+        socket.onerror = function (error) {
+          console.error("WebSocket Error:", error);
+        };
+      });
+    </script>
+  </head>
+  <body>
+    <h1>DCA Bot</h1>
+    <h2 id="currentPrice">Waiting for price update...</h2>
+    <form id="orderForm" onsubmit="placeOrder(event)">
+      <label for="pair">Trading Pair:</label>
+      <input type="text" id="pair" name="pair" value="BTCUSDT" required />
+      <br />
+      <label for="price">Price:</label>
+      <input type="text" id="price" name="price" value="25000" required />
+      <br />
+      <label for="quantity">Quantity:</label>
+      <input type="text" id="quantity" name="quantity" value="0.001" required />
+      <br />
+      <button type="submit">Place Order</button>
+    </form>
+    <div id="result" style="margin-top: 20px; color: green"></div>
+  </body>
+</html>
