@@ -4,11 +4,11 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pytest = "*"
-python-binance = "*"
-python-dotenv = "*"
-uvicorn = "*"
 fastapi = {extras = ["standard"], version = "*"}
+sqlalchemy = "*"
+psycopg2-binary = "*"
+binance-connector = "*"
+uvicorn = "*"
 
 [dev-packages]
 
