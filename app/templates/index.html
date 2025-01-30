@@ -33,7 +33,7 @@
       }
 
       document.addEventListener("DOMContentLoaded", function () {
-        const socket = new WebSocket("ws://localhost:8000/ws");
+        const socket = new WebSocket("ws://{{request.url.hostname}}:{{request.url.port}}/ws");
 
         socket.onmessage = function (event) {
           const data = JSON.parse(event.data);

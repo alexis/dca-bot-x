@@ -6,6 +6,7 @@ services:
       - "8000:80"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/trading_db
+      - ENV=production
       - BINANCE_API_KEY
       - BINANCE_API_SECRET
       - BINANCE_TESTNET

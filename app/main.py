@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+ENV = os.getenv('ENV', 'development')
+
 # Get the absolute path to the templates directory
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
