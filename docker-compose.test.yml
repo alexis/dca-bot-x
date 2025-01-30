@@ -12,6 +12,8 @@ services:
 
   test:
     build: .
+    volumes:
+      - .:/app
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@test-db:5432/test_trading_db
       - BINANCE_TESTNET=1

@@ -1,17 +1,20 @@
 import pytest
+from decimal import Decimal
 from app.models import Bot, TradingCycle
 from app.enums import ExchangeType, SymbolType, BotStatusType
 from uuid import uuid4
 
 def test_calculate_grid_prices(trading_service):
     bot = Bot(
-        grid_length=10,
-        first_order_offset=1,
+        grid_length=Decimal('10'),
+        first_order_offset=Decimal('1'),
         num_orders=5,
-        amount=1000,
-        next_order_volume=5
+        amount=Decimal('1000'),
+        next_order_volume=Decimal('5'),
+        log_coefficient=Decimal('1'),
+        profit_capitalization=Decimal('1')
     )
-    market_price = 25000
+    market_price = Decimal('25000')
     
     prices = trading_service.calculate_grid_prices(market_price, bot)
     
@@ -21,15 +24,17 @@ def test_calculate_grid_prices(trading_service):
     
     # Check price intervals are equal
     intervals = [prices[i] - prices[i+1] for i in range(len(prices)-1)]
-    assert all(abs(intervals[0] - interval) < 0.0001 for interval in intervals)
+    assert all(abs(intervals[0] - interval) < Decimal('0.0001') for interval in intervals)
 
 def test_calculate_grid_quantities(trading_service):
     bot = Bot(
-        amount=1000,
-        next_order_volume=5,
-        num_orders=5
+        amount=Decimal('1000'),
+        next_order_volume=Decimal('5'),
+        num_orders=5,
+        log_coefficient=Decimal('1'),
+        profit_capitalization=Decimal('1')
     )
-    prices = [25000, 24750, 24500, 24250,24000]
+    prices = [Decimal('25000'), Decimal('24750'), Decimal('24500'), Decimal('24250'), Decimal('24000')]
     
     quantities = trading_service.calculate_grid_quantities(prices, bot)
     
@@ -39,7 +44,7 @@ def test_calculate_grid_quantities(trading_service):
     
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
-    assert abs(total_investment - bot.amount) < 0.01
+    assert abs(total_investment - bot.amount) < Decimal('0.01')
 
 @pytest.mark.asyncio
 async def test_start_new_cycle(trading_service, mock_binance_client):
@@ -55,17 +60,19 @@ async def test_start_new_cycle(trading_service, mock_binance_client):
         name="Test Bot",
         exchange=ExchangeType.BINANCE,
         symbol=SymbolType.BTC_USDT,
-        amount=1000,
-        grid_length=10,
-        first_order_offset=1,
+        amount=Decimal('1000'),
+        grid_length=Decimal('10'),
+        first_order_offset=Decimal('1'),
         num_orders=5,
-        next_order_volume=5,
-        profit_percentage=1,
-        price_change_percentage=1,
+        next_order_volume=Decimal('5'),
+        profit_percentage=Decimal('1'),
+        price_change_percentage=Decimal('1'),
         status=BotStatusType.ACTIVE,
-        is_active=True
+        is_active=True,
+        log_coefficient=Decimal('1'),
+        profit_capitalization=Decimal('1')
     )
-    
+
     cycle = trading_service.start_new_cycle(bot)
     
     assert cycle is not None
