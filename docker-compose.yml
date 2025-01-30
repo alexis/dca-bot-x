@@ -1,14 +1,16 @@
+# See additional params for local dev in docker-compose.override.yml
 services:
   web:
     build: .
     ports:
-      - "${SERVER_PORT:-5000}:80"
+      - "8000:80"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/trading_db
+      - BINANCE_API_KEY
+      - BINANCE_API_SECRET
+      - BINANCE_TESTNET
     depends_on:
       - db
-    volumes:
-      - .:/app
 
   db:
     image: postgres:17
@@ -19,7 +21,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=trading_db
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "5432:5432"
 
 volumes:
   postgres_data:

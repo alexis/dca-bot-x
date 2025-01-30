@@ -1,0 +1,3 @@
+#!/bin/bash
+
+DOCKER_CONTEXT=remote COMPOSE_FILE=docker-compose.yml docker "$@"
