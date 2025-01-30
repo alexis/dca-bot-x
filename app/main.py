@@ -112,7 +112,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "ETHUSDT": eth_usdt["price"]
             }
             await websocket.send_text(json.dumps(prices))
-            await asyncio.sleep(1)  # Send price updates every second
+            await asyncio.sleep(0.5)  # Send price updates every 0.5 sec
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
             break

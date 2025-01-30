@@ -66,18 +66,6 @@
         socket.onerror = function (error) {
           console.error("WebSocket Error:", error);
         };
-
-        // Update price when pair changes
-        document.getElementById("pair").addEventListener("change", function () {
-          const selectedPair = this.value;
-          const event = new Event("message"); // Trigger WebSocket message manually if needed
-          socket.onmessage({
-            data: JSON.stringify({
-              BTCUSDT: selectedPair === "BTCUSDT" ? 0 : null, // Simulating response
-              ETHUSDT: selectedPair === "ETHUSDT" ? 0 : null,
-            }),
-          });
-        });
       });
     </script>
   </head>
