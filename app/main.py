@@ -32,6 +32,13 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 # Include bot routes
 app.include_router(bot.router, prefix="/api/v1")
 
+# Initialize Binance client
+client = Spot(
+  api_key=os.getenv("BINANCE_API_KEY"),
+  api_secret=os.getenv("BINANCE_API_SECRET"),
+  base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") else 'https://api.binance.com'
+)
+
 # WebSocket manager
 ws_manager = None
 
@@ -69,6 +76,26 @@ async def balance(assets: Optional[List[str]] = Query(None)):
         return balances
     except Exception as e:
         logger.error(f"Error getting balance: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/order")
+async def place_order(request: Request):
+    data = await request.json()
+    pair = data.get("pair", "BTCUSDT")
+    price = data.get("price", "25000")
+    quantity = data.get("quantity", "0.001")
+    try:
+        order = client.new_order(
+            symbol=pair,
+            side='BUY',
+            type='LIMIT',
+            timeInForce='GTC',
+            quantity=quantity,
+            price=price
+        )
+        return order
+    except Exception as e:
+        logger.error(f"Error placing order: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.websocket("/ws")
