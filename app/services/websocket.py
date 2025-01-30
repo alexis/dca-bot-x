@@ -11,18 +11,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 class BotWebsocketManager:
-    def __init__(self, trading_service: TradingService, db: Session):
+    def __init__(self, trading_service: TradingService, db: Session, ws_client: Spot):
         self.trading_service = trading_service
         self.db = db
-        self.ws_client = WebsocketClient()
+        self.ws_client = ws_client
         self.active_bots: Dict[str, Bot] = {}
         self.active_cycles: Dict[str, TradingCycle] = {}
         self.active_symbols: Set[str] = set()
 
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""
-        self.ws_client.start()
-        
         # Subscribe to order updates for active bots
         for symbol in self.active_symbols:
             self.ws_client.user_data(

@@ -38,8 +38,6 @@ client = Spot(
   api_secret=os.getenv("BINANCE_API_SECRET"),
   base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") else 'https://api.binance.com'
 )
-
-# WebSocket manager
 ws_manager = None
 
 @app.on_event("startup")
@@ -47,19 +45,14 @@ async def startup_event():
     global ws_manager
     # Initialize trading service and websocket manager
     db = next(get_db())
-    client = Spot(
-        api_key=os.getenv("BINANCE_API_KEY"),
-        api_secret=os.getenv("BINANCE_API_SECRET"),
-        base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") == '1' else 'https://api.binance.com'
-    )
     trading_service = TradingService(client=client, db=db)
-    # ws_manager = BotWebsocketManager(trading_service=trading_service, db=db)
-    # await ws_manager.start()
+    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, ws_client=client)
+    await ws_manager.start()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     if ws_manager:
-        ws_manager.ws_client.stop()
+        await ws_manager.ws_client.close_connection()
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
