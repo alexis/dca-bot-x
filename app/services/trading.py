@@ -16,30 +16,38 @@ class TradingService:
 
     def calculate_grid_prices(self, market_price: Decimal, bot: Bot) -> List[Decimal]:
         """Calculate grid order prices"""
-        first_order_price = market_price * (1 - bot.first_order_offset / 100)
-        total_drop = first_order_price * (bot.grid_length / 100)
-        price_step = total_drop / (bot.num_orders - 1) if bot.num_orders > 1 else 0
+        # Convert bot parameters to Decimal to ensure consistent arithmetic
+        first_order_offset = Decimal(str(bot.first_order_offset))
+        grid_length = Decimal(str(bot.grid_length))
+        
+        first_order_price = market_price * (Decimal('1') - first_order_offset / Decimal('100'))
+        total_drop = first_order_price * (grid_length / Decimal('100'))
+        price_step = total_drop / (Decimal(str(bot.num_orders - 1))) if bot.num_orders > 1 else Decimal('0')
         
         prices = []
         for i in range(bot.num_orders):
-            price = first_order_price - (price_step * i)
+            price = first_order_price - (price_step * Decimal(str(i)))
             prices.append(price)
         
         return prices
 
     def calculate_grid_quantities(self, prices: List[Decimal], bot: Bot) -> List[Decimal]:
         """Calculate quantities for each grid level"""
-        base_quantity = bot.amount / sum(prices)  # Initial equal distribution
+        # Convert bot parameters to Decimal
+        amount = Decimal(str(bot.amount))
+        next_order_volume = Decimal(str(bot.next_order_volume))
+        
+        base_quantity = amount / sum(prices)  # Initial equal distribution
         quantities = []
         
         current_quantity = base_quantity
         for _ in range(bot.num_orders):
             quantities.append(current_quantity)
-            current_quantity *= (1 + bot.next_order_volume / 100)
+            current_quantity *= (Decimal('1') + next_order_volume / Decimal('100'))
             
         # Normalize quantities to match total amount
         total_value = sum(p * q for p, q in zip(prices, quantities))
-        scale_factor = bot.amount / total_value
+        scale_factor = amount / total_value
         quantities = [q * scale_factor for q in quantities]
         
         return quantities

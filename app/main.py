@@ -9,7 +9,7 @@ import json
 import os
 from typing import List, Optional
 from uuid import UUID
-from .models import Base
+from .models import Base, Bot
 from .database import engine, get_db
 from .routes import bot
 from .services.trading import TradingService
@@ -43,9 +43,13 @@ ws_manager = None
 @app.on_event("startup")
 async def startup_event():
     global ws_manager
+
     # Initialize trading service and websocket manager
     db = next(get_db())
+    bot = db.query(Bot).first()
     trading_service = TradingService(client=client, db=db)
+    # trading_service.start_new_cycle(bot)
+
     ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, ws_client=client)
     await ws_manager.start()
 

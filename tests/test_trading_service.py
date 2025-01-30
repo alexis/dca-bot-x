@@ -39,7 +39,7 @@ def test_calculate_grid_quantities(trading_service):
     quantities = trading_service.calculate_grid_quantities(prices, bot)
     
     assert len(quantities) == 5
-    assert all(q > 0 for q in quantities)
+    assert all(q > Decimal('0') for q in quantities)
     assert quantities[1] > quantities[0]  # Check increasing quantities
     
     # Check total investment matches bot amount

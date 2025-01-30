@@ -36,17 +36,6 @@ def db_session(db_engine):
     connection.close()
 
 @pytest.fixture
-def client(db_session):
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-    
-    app.dependency_overrides[get_db] = override_get_db
-    return TestClient(app)
-
-@pytest.fixture
 def mock_binance_client():
     return Mock()
 
