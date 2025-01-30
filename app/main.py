@@ -3,22 +3,20 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from binance.spot import Spot
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
 import asyncio
 import logging
 import json
 import os
 from typing import List, Optional
-from uuid import UUID, uuid4
-from .models import Base, Bot, TradingCycle, Order, ExchangeKey
-from .schemas import (
-    BotCreate, BotResponse,
-    TradingCycleCreate, TradingCycleResponse,
-    OrderCreate, OrderResponse,
-    ExchangeKeyCreate, ExchangeKeyResponse
-)
-from .enums import *
+from uuid import UUID
+from .models import Base
+from .database import engine, get_db
+from .routes import bot
+from .services.trading import TradingService
+from .services.websocket import BotWebsocketManager
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,33 +29,30 @@ ENV = os.getenv('ENV', 'development')
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Database configuration
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/trading_db')
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Include bot routes
+app.include_router(bot.router, prefix="/api/v1")
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# WebSocket manager
+ws_manager = None
 
-# Binance client configuration
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET")
-BINANCE_TESTNET = os.getenv("BINANCE_TESTNET") == '1'
+@app.on_event("startup")
+async def startup_event():
+    global ws_manager
+    # Initialize trading service and websocket manager
+    db = next(get_db())
+    client = Spot(
+        api_key=os.getenv("BINANCE_API_KEY"),
+        api_secret=os.getenv("BINANCE_API_SECRET"),
+        base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") == '1' else 'https://api.binance.com'
+    )
+    trading_service = TradingService(client=client, db=db)
+    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db)
+    await ws_manager.start()
 
-# Initialize Binance client
-client = Spot(
-    api_key=BINANCE_API_KEY,
-    api_secret=BINANCE_API_SECRET,
-    base_url='https://testnet.binance.vision' if BINANCE_TESTNET else 'https://api.binance.com'
-)
-
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+@app.on_event("shutdown")
+async def shutdown_event():
+    if ws_manager:
+        ws_manager.ws_client.stop()
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -74,27 +69,6 @@ async def balance(assets: Optional[List[str]] = Query(None)):
         return balances
     except Exception as e:
         logger.error(f"Error getting balance: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/order")
-async def place_order(request: Request):
-    data = await request.json()
-    pair = data.get("pair", "BTCUSDT")
-    price = data.get("price", "25000")
-    quantity = data.get("quantity", "0.001")
-
-    try:
-        order = client.new_order(
-            symbol=pair,
-            side='BUY',
-            type='LIMIT',
-            timeInForce='GTC',
-            quantity=quantity,
-            price=price
-        )
-        return order
-    except Exception as e:
-        logger.error(f"Error placing order: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.websocket("/ws")

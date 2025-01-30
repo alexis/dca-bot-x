@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:17
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=test_trading_db
+    ports:
+      - "5433:5432"
+
+  test:
+    build: .
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@test-db:5432/test_trading_db
+      - BINANCE_TESTNET=1
+      - PYTHONPATH=/app
+    depends_on:
+      - test-db
+    command: python -m pytest tests/ -v

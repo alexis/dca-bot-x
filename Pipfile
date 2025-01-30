@@ -11,6 +11,13 @@ binance-connector = "*"
 uvicorn = "*"
 
 [dev-packages]
+pytest = "*"
+pytest-asyncio = "*"
+httpx = "*"
+pytest-cov = "*"
 
 [requires]
 python_version = "3.13"
+
+[scripts]
+test = "pytest tests/ -v --cov=app"
