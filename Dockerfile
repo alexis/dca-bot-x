@@ -6,8 +6,7 @@ RUN pip install pipenv
 
 COPY Pipfile Pipfile.lock ./
 
-RUN pipenv install --system --deploy
-RUN pip install pytest
+RUN pipenv install --system --deploy --dev
 
 COPY . .
 

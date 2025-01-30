@@ -1,8 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.database import get_db
 from app.services.trading import TradingService
@@ -14,9 +13,10 @@ DATABASE_URL = "postgresql://postgres:postgres@test-db:5432/test_trading_db"
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+Base = declarative_base()
+
 @pytest.fixture(scope="session")
 def db_engine():
-    Base = declarative_base()
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)

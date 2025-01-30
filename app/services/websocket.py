@@ -1,12 +1,11 @@
 import asyncio
 from typing import Dict, Set
 from binance.spot import Spot
-from binance.websocket.spot.websocket_client import SpotWebsocketClient
+# from binance.websocket.websocket_client import WebsocketClient
 from ..models import Bot, TradingCycle, Order
 from .trading import TradingService
 from sqlalchemy.orm import Session
-from ..models.order_status import OrderStatusType
-from ..models.side_type import SideType
+from ..enums import OrderStatusType, SideType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,7 @@ class BotWebsocketManager:
     def __init__(self, trading_service: TradingService, db: Session):
         self.trading_service = trading_service
         self.db = db
-        self.ws_client = SpotWebsocketClient()
+        self.ws_client = WebsocketClient()
         self.active_bots: Dict[str, Bot] = {}
         self.active_cycles: Dict[str, TradingCycle] = {}
         self.active_symbols: Set[str] = set()

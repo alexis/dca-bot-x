@@ -46,8 +46,8 @@ async def startup_event():
         base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") == '1' else 'https://api.binance.com'
     )
     trading_service = TradingService(client=client, db=db)
-    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db)
-    await ws_manager.start()
+    # ws_manager = BotWebsocketManager(trading_service=trading_service, db=db)
+    # await ws_manager.start()
 
 @app.on_event("shutdown")
 async def shutdown_event():
