@@ -2,13 +2,15 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Column, Float, String, Boolean, Integer, JSON, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 from .enums import *
 
 Base = declarative_base()
 
 class Bot(Base):
     __tablename__ = "bots"
+
+    trading_cycles = relationship("TradingCycle", back_populates="bot")
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(100), nullable=False)
@@ -32,6 +34,8 @@ class Bot(Base):
 
 class TradingCycle(Base):
     __tablename__ = "trading_cycles"
+
+    bot = relationship("Bot", back_populates="trading_cycles")
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bot_id = Column(UUID(as_uuid=True), ForeignKey('bots.id'), nullable=True)
@@ -69,4 +73,3 @@ class Order(Base):
     exchange_order_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
