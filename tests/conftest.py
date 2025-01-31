@@ -5,15 +5,17 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.database import get_db
 from app.services.trading import TradingService
+from app.models import Base
 from unittest.mock import Mock
+import os
 
 # Test database URL
-DATABASE_URL = "postgresql://postgres:postgres@test-db:5432/test_trading_db"
+DATABASE_URL = os.getenv('TEST_DATABASE_URL', "postgresql://postgres:postgres@test-db:5432/test_trading_db")
 
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+#Base = declarative_base()
 
 @pytest.fixture(scope="session")
 def db_engine():
