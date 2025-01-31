@@ -73,6 +73,15 @@
     <div class="container mt-4" style="max-width: 800px">
       <h1 class="text-center">DCA Bot</h1>
       <form id="orderForm" onsubmit="placeOrder(event)" class="row g-3">
+        <div class="col-md-6">
+          <label for="apiKey" class="form-label">Binance API Key:</label>
+          <input type="text" id="apiKey" name="apiKey" class="form-control" required />
+        </div>
+        <div class="col-md-6">
+          <label for="apiSecret" class="form-label">Binance API Secret Key:</label>
+          <input type="password" id="apiSecret" name="apiSecret" class="form-control" required />
+        </div>
+        
         <div class="col-md-4">
           <label for="pair" class="form-label">Trading Pair:</label>
           <select id="pair" name="pair" class="form-control" required>
@@ -82,30 +91,41 @@
         </div>
         <div class="col-md-4">
           <label for="price" class="form-label">Price:</label>
-          <input
-            type="text"
-            id="price"
-            name="price"
-            class="form-control"
-            value=""
-            required
-          />
+          <input type="text" id="price" name="price" class="form-control" required />
         </div>
         <div class="col-md-4">
           <label for="quantity" class="form-label">Quantity:</label>
-          <input
-            type="text"
-            id="quantity"
-            name="quantity"
-            class="form-control"
-            value="0.001"
-            required
-          />
+          <input type="text" id="quantity" name="quantity" class="form-control" value="0.001" required />
         </div>
+        
+        <div class="col-md-4">
+          <label for="gridLength" class="form-label">Grid Length (%):</label>
+          <input type="number" id="gridLength" name="gridLength" class="form-control" value="50" min="0.1" max="99.9" step="0.1" required />
+        </div>
+        <div class="col-md-4">
+          <label for="firstOrderOffset" class="form-label">First Order Offset (%):</label>
+          <input type="number" id="firstOrderOffset" name="firstOrderOffset" class="form-control" value="10" min="0.1" max="99.9" step="0.1" required />
+        </div>
+        <div class="col-md-4">
+          <label for="numOrders" class="form-label">Number of Orders:</label>
+          <input type="number" id="numOrders" name="numOrders" class="form-control" value="5" min="1" max="100" required />
+        </div>
+        
+        <div class="col-md-4">
+          <label for="amountIncrease" class="form-label">Amount Increase (%):</label>
+          <input type="number" id="amountIncrease" name="amountIncrease" class="form-control" value="20" min="0" max="100" step="0.1" required />
+        </div>
+        <div class="col-md-4">
+          <label for="profitPercentage" class="form-label">Profit Percentage (%):</label>
+          <input type="number" id="profitPercentage" name="profitPercentage" class="form-control" value="15" min="1" max="1000" required />
+        </div>
+        <div class="col-md-4">
+          <label for="upperPriceLimit" class="form-label">Upper Price Limit (%):</label>
+          <input type="number" id="upperPriceLimit" name="upperPriceLimit" class="form-control" value="5" min="1" max="1000" required />
+        </div>
+        
         <div class="col-12">
-          <button type="submit" class="btn btn-primary w-100">
-            Place Order
-          </button>
+          <button type="submit" class="btn btn-primary w-100">Start</button>
         </div>
       </form>
 
