@@ -10,9 +10,7 @@ def test_calculate_grid_prices(trading_service):
         first_order_offset=Decimal('1'),
         num_orders=5,
         amount=Decimal('1000'),
-        next_order_volume=Decimal('5'),
-        log_coefficient=Decimal('1'),
-        profit_capitalization=Decimal('1')
+        next_order_volume=Decimal('5')
     )
     market_price = Decimal('25000')
     
@@ -30,9 +28,7 @@ def test_calculate_grid_quantities(trading_service):
     bot = Bot(
         amount=Decimal('1000'),
         next_order_volume=Decimal('5'),
-        num_orders=5,
-        log_coefficient=Decimal('1'),
-        profit_capitalization=Decimal('1')
+        num_orders=5
     )
     prices = [Decimal('25000'), Decimal('24750'), Decimal('24500'), Decimal('24250'), Decimal('24000')]
     
@@ -67,10 +63,7 @@ async def test_start_new_cycle(trading_service, mock_binance_client):
         next_order_volume=Decimal('5'),
         profit_percentage=Decimal('1'),
         price_change_percentage=Decimal('1'),
-        status=BotStatusType.ACTIVE,
         is_active=True,
-        log_coefficient=Decimal('1'),
-        profit_capitalization=Decimal('1')
     )
 
     cycle = trading_service.start_new_cycle(bot)

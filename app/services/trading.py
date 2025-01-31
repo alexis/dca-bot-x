@@ -150,8 +150,6 @@ class TradingService:
             profit_percentage=bot.profit_percentage,
             price_change_percentage=bot.price_change_percentage,
             status=CycleStatusType.ACTIVE,
-            log_coefficient=bot.log_coefficient,
-            profit_capitalization=bot.profit_capitalization
         )
         
         self.db.add(cycle)

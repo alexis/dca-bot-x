@@ -15,8 +15,6 @@ class BotBase(BaseModel):
     next_order_volume: float
     profit_percentage: float
     price_change_percentage: float
-    log_coefficient: float
-    profit_capitalization: float
     upper_price_limit: float
     status: BotStatusType
     is_active: bool = True
@@ -47,8 +45,7 @@ class TradingCycleBase(BaseModel):
     profit_percentage: float
     price_change_percentage: float
     status: CycleStatusType
-    log_coefficient: float
-    profit_capitalization: float
+    bot_id: Optional[UUID4]
 
 class TradingCycleCreate(TradingCycleBase):
     pass
@@ -86,22 +83,3 @@ class OrderResponse(OrderBase):
 
     class Config:
         orm_mode = True
-
-class ExchangeKeyBase(BaseModel):
-    name: str = Field(..., max_length=100)
-    exchange: ExchangeType
-    api_key: str = Field(..., max_length=100)
-    api_secret: str = Field(..., max_length=100)
-    user_id: UUID4
-    is_active: bool = True
-
-class ExchangeKeyCreate(ExchangeKeyBase):
-    pass
-
-class ExchangeKeyResponse(ExchangeKeyBase):
-    id: UUID4
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        orm_mode = True 
