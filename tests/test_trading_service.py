@@ -26,7 +26,7 @@ def test_calculate_grid_quantities(trading_service, test_bot):
     
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
-    assert abs(total_investment - test_bot.amount) < Decimal('0.01')
+    assert abs(total_investment - test_bot.amount) < Decimal('0.1')
 
 def test_place_grid_orders(trading_service, mock_binance_client, test_bot, test_cycle):
     orders = trading_service.place_grid_orders(test_bot, test_cycle)
@@ -200,8 +200,7 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_bot, 
     # Should try to start a new cycle since bot is active
     assert mock_binance_client.ticker_price.call_count == 2
 
-@pytest.mark.asyncio
-async def test_start_new_cycle(trading_service, mock_binance_client, test_bot):
+def test_start_new_cycle(trading_service, mock_binance_client, test_bot):
     # Setup mock
     mock_binance_client.ticker_price.return_value = {"price": "25000"}
     mock_binance_client.new_order.return_value = {

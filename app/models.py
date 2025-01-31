@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import Column, Float, String, Boolean, Integer, JSON, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
@@ -29,8 +29,8 @@ class Bot(Base):
     upper_price_limit = Column(Float, nullable=False)
     is_active = Column(Boolean, default=True)
     status = Column(String(20), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
 class TradingCycle(Base):
     __tablename__ = "trading_cycles"
@@ -51,8 +51,8 @@ class TradingCycle(Base):
     profit_percentage = Column(Float, nullable=False)
     status = Column(String(20), nullable=False)
     price_change_percentage = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
 class Order(Base):
     __tablename__ = "orders"
@@ -71,5 +71,5 @@ class Order(Base):
     number = Column(Integer, nullable=False)
     exchange_order_id = Column(String(100), nullable=False)
     exchange_order_data = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))

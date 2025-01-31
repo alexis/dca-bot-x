@@ -1,5 +1,4 @@
-from decimal import Decimal
-import math
+from decimal import Decimal, ROUND_DOWN
 from typing import List, Dict
 from binance.spot import Spot
 from ..models import Bot, TradingCycle, Order
@@ -26,7 +25,7 @@ class TradingService:
         
         prices = []
         for i in range(bot.num_orders):
-            price = first_order_price - (price_step * Decimal(str(i)))
+            price = round(first_order_price - (price_step * Decimal(str(i))), 2)
             prices.append(price)
         
         return prices
@@ -48,7 +47,7 @@ class TradingService:
         # Normalize quantities to match total amount
         total_value = sum(p * q for p, q in zip(prices, quantities))
         scale_factor = amount / total_value
-        quantities = [q * scale_factor for q in quantities]
+        quantities = [(q * scale_factor).quantize(Decimal('0.000001'), rounding=ROUND_DOWN) for q in quantities]
         
         return quantities
 
