@@ -30,6 +30,15 @@ class TradingService:
         
         return prices
 
+    def _step_size(self, symbol: str) -> Decimal:
+        """Get the step size for a symbol"""
+        if symbol == "BTCUSDT":
+            return Decimal('0.00001')
+        elif symbol == "ETHUSDT":
+            return Decimal('0.0001')
+        else:
+            raise ValueError(f"Unsupported symbol: {symbol}")
+
     def calculate_grid_quantities(self, prices: List[Decimal], bot: Bot) -> List[Decimal]:
         """Calculate quantities for each grid level"""
         # Convert bot parameters to Decimal
@@ -47,7 +56,8 @@ class TradingService:
         # Normalize quantities to match total amount
         total_value = sum(p * q for p, q in zip(prices, quantities))
         scale_factor = amount / total_value
-        quantities = [(q * scale_factor).quantize(Decimal('0.000001'), rounding=ROUND_DOWN) for q in quantities]
+        step_size = self._step_size(bot.symbol)
+        quantities = [(q * scale_factor).quantize(step_size, rounding=ROUND_DOWN) for q in quantities]
         
         return quantities
 

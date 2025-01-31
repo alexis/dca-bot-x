@@ -26,7 +26,7 @@ def test_calculate_grid_quantities(trading_service, test_bot):
     
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
-    assert abs(total_investment - test_bot.amount) < Decimal('0.1')
+    assert abs(total_investment - test_bot.amount) < 1
 
 def test_place_grid_orders(trading_service, mock_binance_client, test_bot, test_cycle):
     orders = trading_service.place_grid_orders(test_bot, test_cycle)
