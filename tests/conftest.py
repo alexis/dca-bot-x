@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.database import get_db
-from app.services.trading import TradingService
+from app.services.trading_service import TradingService
 from app.models import Base
 from unittest.mock import Mock
 import os

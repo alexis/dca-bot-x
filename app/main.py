@@ -12,8 +12,8 @@ from uuid import UUID
 from .models import Base, Bot
 from .database import engine, get_db
 from .routes import bot
-from .services.trading import TradingService
-from .services.websocket import BotWebsocketManager
+from .services.trading_service import TradingService
+from .services.websocket_manager import BotWebsocketManager
 
 # Create tables
 Base.metadata.create_all(bind=engine)

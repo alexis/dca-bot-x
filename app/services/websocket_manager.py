@@ -3,7 +3,7 @@ from typing import Dict, Set
 from binance.spot import Spot
 # from binance.websocket.websocket_client import WebsocketClient
 from ..models import Bot, TradingCycle, Order
-from .trading import TradingService
+from .trading_service import TradingService
 from sqlalchemy.orm import Session
 from ..enums import OrderStatusType, SideType
 import logging
