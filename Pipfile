@@ -15,6 +15,7 @@ pytest = "*"
 pytest-asyncio = "*"
 httpx = "*"
 pytest-cov = "*"
+IPython = "*"
 
 [requires]
 python_version = "3.13"
