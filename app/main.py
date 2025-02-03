@@ -50,7 +50,7 @@ async def startup_event():
     trading_service = TradingService(client=client, db=db)
     trading_service.launch(bot)
 
-    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, ws_client=client)
+    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, api_key=os.getenv("BINANCE_API_KEY"), api_secret=os.getenv("BINANCE_API_SECRET"))
     await ws_manager.start()
 
 @app.on_event("shutdown")

@@ -1,35 +1,45 @@
 import asyncio
 from typing import Dict, Set
-from binance.spot import Spot
-# from binance.websocket.websocket_client import WebsocketClient
+from binance.websocket.spot.websocket_api import SpotWebsocketAPIClient
 from ..models import Bot, TradingCycle, Order
 from .trading_service import TradingService
 from sqlalchemy.orm import Session
 from ..enums import OrderStatusType, SideType
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class BotWebsocketManager:
-    def __init__(self, trading_service: TradingService, db: Session, ws_client: Spot):
+    def __init__(self, trading_service: TradingService, db: Session, api_key: str, api_secret: str):
         self.trading_service = trading_service
         self.db = db
-        self.ws_client = ws_client
         self.active_bots: Dict[str, Bot] = {}
         self.active_cycles: Dict[str, TradingCycle] = {}
-        self.active_symbols: Set[str] = set()
+        self.active_symbols: Set[str] = ['BTCUSDT', 'ETHUSDT']
+
+        self.client = self._client(api_key, api_secret)
+
+    def _client(self, api_key: str, api_secret: str):
+        return SpotWebsocketAPIClient(
+            stream_url=self._stream_url(),
+            api_key=api_key,
+            api_secret=api_secret,
+            on_message=self.message_handler
+        )
+
+    def _stream_url(self):
+        return "wss://ws-api.testnet.binance.vision/ws-api/v3" if os.getenv("BINANCE_TESTNET") else "wss://ws-api.binance.com/ws-api/v3"
+
+    def message_handler(self, _, msg):
+        print(msg)
 
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""
         # Subscribe to order updates for active bots
         for symbol in self.active_symbols:
-            self.ws_client.user_data(
-                listen_key=self._get_listen_key(),
-                callback=self.handle_user_data
-            )
-            self.ws_client.ticker(
+            self.client.ticker(
                 symbol=symbol,
-                callback=self.handle_price_update
             )
 
     def handle_user_data(self, msg: dict):
