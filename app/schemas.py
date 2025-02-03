@@ -30,7 +30,7 @@ class BotResponse(BotBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class TradingCycleBase(BaseModel):
     exchange: ExchangeType
@@ -56,7 +56,7 @@ class TradingCycleResponse(TradingCycleBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class OrderBase(BaseModel):
     exchange: ExchangeType
@@ -82,4 +82,4 @@ class OrderResponse(OrderBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
