@@ -13,6 +13,20 @@ class TradingService:
         self.client = client
         self.db = db
 
+    def launch(self, bot: Bot):
+        """Launch a new trading cycle for the bot"""
+
+        if not bot.is_active: return
+
+        # Check if bot has an active cycle
+        active_cycle = self.db.query(TradingCycle).filter(
+            TradingCycle.bot_id == bot.id,
+            TradingCycle.status == CycleStatusType.ACTIVE
+        ).first()
+
+        if not active_cycle:
+            self.start_new_cycle(bot)
+
     def calculate_grid_prices(self, market_price: Decimal, bot: Bot) -> List[Decimal]:
         """Calculate grid order prices"""
         # Convert bot parameters to Decimal to ensure consistent arithmetic
@@ -144,6 +158,15 @@ class TradingService:
 
     def start_new_cycle(self, bot: Bot) -> TradingCycle:
         """Start a new trading cycle for the bot"""
+        # Check for existing active cycle
+        active_cycle = self.db.query(TradingCycle).filter(
+            TradingCycle.bot_id == bot.id,
+            TradingCycle.status == CycleStatusType.ACTIVE
+        ).first()
+        
+        if active_cycle:
+            raise ValueError(f"Bot {bot.name} already has an active cycle")
+
         market_price = Decimal(self.client.ticker_price(symbol=bot.symbol)["price"])
         
         cycle = TradingCycle(
@@ -155,10 +178,11 @@ class TradingService:
             num_orders=bot.num_orders,
             partial_num_orders=0,
             next_order_volume=bot.next_order_volume,
-            price=float(market_price),
+            price=market_price,
             profit_percentage=bot.profit_percentage,
             price_change_percentage=bot.price_change_percentage,
             status=CycleStatusType.ACTIVE,
+            bot_id=bot.id
         )
         
         self.db.add(cycle)

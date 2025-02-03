@@ -48,7 +48,7 @@ async def startup_event():
     db = next(get_db())
     bot = db.query(Bot).first()
     trading_service = TradingService(client=client, db=db)
-    # trading_service.start_new_cycle(bot)
+    trading_service.launch(bot)
 
     ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, ws_client=client)
     await ws_manager.start()

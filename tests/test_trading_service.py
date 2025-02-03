@@ -4,6 +4,78 @@ from app.models import Bot, TradingCycle, Order
 from app.enums import ExchangeType, SymbolType, BotStatusType, OrderStatusType, SideType, TimeInForceType, OrderType, CycleStatusType
 from uuid import uuid4
 
+def test_launch(trading_service, test_bot):
+    trading_service.launch(test_bot)
+    assert test_bot.status == BotStatusType.ACTIVE
+
+def test_launch_inactive_bot(trading_service, test_bot, mock_binance_client):
+    # Set bot as inactive
+    test_bot.is_active = False
+    
+    trading_service.launch(test_bot)
+    
+    # Should not create any cycles or orders for inactive bot
+    assert mock_binance_client.ticker_price.call_count == 0
+    assert mock_binance_client.new_order.call_count == 0
+
+def test_launch_with_existing_cycle(trading_service, test_bot, mock_binance_client, db_session):
+    # Create an active cycle
+    active_cycle = TradingCycle(
+        exchange=test_bot.exchange,
+        symbol=test_bot.symbol,
+        amount=test_bot.amount,
+        grid_length=test_bot.grid_length,
+        first_order_offset=test_bot.first_order_offset,
+        num_orders=test_bot.num_orders,
+        partial_num_orders=0,
+        next_order_volume=test_bot.next_order_volume,
+        price=Decimal('25000'),
+        profit_percentage=test_bot.profit_percentage,
+        price_change_percentage=test_bot.price_change_percentage,
+        status=CycleStatusType.ACTIVE,
+        bot_id=test_bot.id
+    )
+    db_session.add(active_cycle)
+    db_session.commit()
+    
+    trading_service.launch(test_bot)
+    
+    # Should not create new cycle when active one exists
+    assert mock_binance_client.ticker_price.call_count == 0
+    assert mock_binance_client.new_order.call_count == 0
+    cycles = db_session.query(TradingCycle).filter(TradingCycle.bot_id == test_bot.id).all()
+    assert len(cycles) == 1
+
+def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_session):
+    # Setup mock
+    mock_binance_client.ticker_price.return_value = {"price": "25000"}
+    mock_binance_client.new_order.return_value = {
+        "orderId": "123",
+        "status": "NEW"
+    }
+    
+    trading_service.launch(test_bot)
+    
+    # Should create new cycle and orders
+    assert mock_binance_client.ticker_price.call_count == 2
+    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+    
+    # Verify cycle was created
+    cycle = db_session.query(TradingCycle).filter(
+        TradingCycle.bot_id == test_bot.id,
+        TradingCycle.status == CycleStatusType.ACTIVE
+    ).first()
+
+    assert cycle is not None
+    assert cycle.exchange == test_bot.exchange
+    assert cycle.symbol == test_bot.symbol
+    assert cycle.amount == test_bot.amount
+    
+    # Verify orders were created
+    orders = db_session.query(Order).filter(Order.cycle_id == cycle.id).all()
+    assert len(orders) == test_bot.num_orders
+    assert all(order.status == OrderStatusType.NEW for order in orders)
+
 def test_calculate_grid_prices(trading_service, test_bot):
     market_price = Decimal('25000')
     prices = trading_service.calculate_grid_prices(market_price, test_bot)
@@ -214,6 +286,32 @@ def test_start_new_cycle(trading_service, mock_binance_client, test_bot):
     assert cycle.exchange == test_bot.exchange
     assert cycle.symbol == test_bot.symbol
     assert cycle.amount == test_bot.amount
+    assert cycle.bot_id == test_bot.id
+    assert cycle.status == CycleStatusType.ACTIVE
     
     # Verify orders were placed
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders 
+    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+
+def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client, test_bot, db_session):
+    # Create an active cycle
+    active_cycle = TradingCycle(
+        exchange=test_bot.exchange,
+        symbol=test_bot.symbol,
+        amount=test_bot.amount,
+        grid_length=test_bot.grid_length,
+        first_order_offset=test_bot.first_order_offset,
+        num_orders=test_bot.num_orders,
+        partial_num_orders=0,
+        next_order_volume=test_bot.next_order_volume,
+        price=Decimal('25000'),
+        profit_percentage=test_bot.profit_percentage,
+        price_change_percentage=test_bot.price_change_percentage,
+        status=CycleStatusType.ACTIVE,
+        bot_id=test_bot.id
+    )
+    db_session.add(active_cycle)
+    db_session.commit()
+    
+    # Try to start a new cycle
+    with pytest.raises(ValueError, match=f"Bot {test_bot.name} already has an active cycle"):
+        trading_service.start_new_cycle(test_bot) 
