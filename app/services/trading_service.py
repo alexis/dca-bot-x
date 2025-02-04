@@ -6,8 +6,6 @@ from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, Cycle
 from sqlalchemy.orm import Session
 import logging
 
-logger = logging.getLogger(__name__)
-
 class TradingService:
     def __init__(self, client: Spot, db: Session):
         self.client = client
@@ -75,6 +73,42 @@ class TradingService:
         
         return quantities
 
+    def create_binance_order(self, bot: Bot, cycle: TradingCycle, side: str, price: Decimal, quantity: Decimal, number: int) -> Order:
+        """Create a Binance order and corresponding Order record"""
+
+        if (price * quantity) < 5:
+            raise Exception(f"Order notional value {price * quantity} is below minimum {5}")
+
+        try:
+            binance_order = self.client.new_order(
+                symbol=bot.symbol,
+                side=side,
+                type="LIMIT",
+                timeInForce="GTC",
+                quantity=str(quantity),
+                price=str(price)
+            )
+            
+            order = Order(
+                exchange=bot.exchange,
+                symbol=bot.symbol,
+                side=SideType.BUY if side == "BUY" else SideType.SELL,
+                time_in_force=TimeInForceType.GTC,
+                type=OrderType.LIMIT,
+                price=float(price),
+                quantity=float(quantity),
+                amount=float(price * quantity),
+                status=OrderStatusType.NEW,
+                number=number,
+                exchange_order_id=binance_order["orderId"],
+                exchange_order_data=binance_order,
+                cycle_id=cycle.id
+            )
+            return order
+            
+        except Exception as e:
+            raise Exception(f"Failed to create order: {e}")
+
     def place_grid_orders(self, bot: Bot, cycle: TradingCycle) -> List[Order]:
         """Place initial grid orders"""
         market_price = Decimal(self.client.ticker_price(symbol=bot.symbol)["price"])
@@ -83,36 +117,15 @@ class TradingService:
         
         orders = []
         for i, (price, quantity) in enumerate(zip(prices, quantities)):
-            try:
-                binance_order = self.client.new_order(
-                    symbol=bot.symbol,
-                    side="BUY",
-                    type="LIMIT",
-                    timeInForce="GTC",
-                    quantity=str(quantity),
-                    price=str(price)
-                )
-                
-                order = Order(
-                    exchange=bot.exchange,
-                    symbol=bot.symbol,
-                    side=SideType.BUY,
-                    time_in_force=TimeInForceType.GTC,
-                    type=OrderType.LIMIT,
-                    price=float(price),
-                    quantity=float(quantity),
-                    amount=float(price * quantity),
-                    status=OrderStatusType.NEW,
-                    number=i + 1,
-                    exchange_order_id=binance_order["orderId"],
-                    exchange_order_data=binance_order,
-                    cycle_id=cycle.id
-                )
-                orders.append(order)
-                
-            except Exception as e:
-                # Handle error, cancel placed orders if needed
-                raise Exception(f"Failed to place grid order: {e}")
+            order = self.create_binance_order(
+                bot=bot,
+                cycle=cycle,
+                side="BUY",
+                price=price,
+                quantity=quantity,
+                number=i + 1
+            )
+            orders.append(order)
                 
         return orders
 
@@ -127,29 +140,13 @@ class TradingService:
         take_profit_price = avg_price * (1 + bot.profit_percentage / 100)
         
         try:
-            binance_order = self.client.new_order(
-                symbol=bot.symbol,
+            order = self.create_binance_order(
+                bot=bot,
+                cycle=cycle,
                 side="SELL",
-                type="LIMIT",
-                timeInForce="GTC",
-                quantity=str(total_quantity),
-                price=str(take_profit_price)
-            )
-            
-            order = Order(
-                exchange=bot.exchange,
-                symbol=bot.symbol,
-                side=SideType.SELL,
-                time_in_force=TimeInForceType.GTC,
-                type=OrderType.LIMIT,
-                price=float(take_profit_price),
-                quantity=float(total_quantity),
-                amount=float(take_profit_price * total_quantity),
-                status=OrderStatusType.NEW,
-                number=len(filled_orders) + 1,
-                exchange_order_id=binance_order["orderId"],
-                exchange_order_data=binance_order,
-                cycle_id=cycle.id
+                price=Decimal(str(take_profit_price)),
+                quantity=Decimal(str(total_quantity)),
+                number=len(filled_orders) + 1
             )
             return order
             
@@ -217,7 +214,7 @@ class TradingService:
                 )
                 order.status = OrderStatusType.CANCELED
             except Exception as e:
-                logger.error(f"Failed to cancel order {order.exchange_order_id}: {e}")
+                logging.error(f"Failed to cancel order {order.exchange_order_id}: {e}")
         
         self.db.commit()
 
@@ -245,7 +242,7 @@ class TradingService:
                 existing_tp.status = OrderStatusType.CANCELED
                 self.db.commit()
             except Exception as e:
-                logger.error(f"Failed to cancel take profit order: {e}")
+                logging.error(f"Failed to cancel take profit order: {e}")
         
         # Place new take profit order
         new_tp = self.place_take_profit_order(cycle.bot, cycle, filled_orders)

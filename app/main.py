@@ -19,7 +19,6 @@ from .services.websocket_manager import BotWebsocketManager
 Base.metadata.create_all(bind=engine)
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -38,6 +37,8 @@ client = Spot(
   api_secret=os.getenv("BINANCE_API_SECRET"),
   base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") else 'https://api.binance.com'
 )
+logging.info(f"Using {client.base_url} for Binance API")
+
 ws_manager = None
 
 @app.on_event("startup")
@@ -72,7 +73,7 @@ async def balance(assets: Optional[List[str]] = Query(None)):
             balances = [x for x in balances if x["asset"] in set(assets)]
         return balances
     except Exception as e:
-        logger.error(f"Error getting balance: {e}")
+        logging.error(f"Error getting balance: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/order")
@@ -92,13 +93,13 @@ async def place_order(request: Request):
         )
         return order
     except Exception as e:
-        logger.error(f"Error placing order: {e}")
+        logging.error(f"Error placing order: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    logger.info("WebSocket connection established")
+    logging.info("WebSocket connection established")
 
     while True:
         try:
@@ -111,5 +112,5 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_text(json.dumps(prices))
             await asyncio.sleep(0.5)  # Send price updates every 0.5 sec
         except Exception as e:
-            logger.error(f"WebSocket error: {e}")
+            logging.error(f"WebSocket error: {e}")
             break

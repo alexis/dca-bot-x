@@ -8,8 +8,6 @@ from ..enums import OrderStatusType, SideType
 import logging
 import os
 
-logger = logging.getLogger(__name__)
-
 class BotWebsocketManager:
     def __init__(self, trading_service: TradingService, db: Session, api_key: str, api_secret: str):
         self.trading_service = trading_service
@@ -17,7 +15,6 @@ class BotWebsocketManager:
         self.active_bots: Dict[str, Bot] = {}
         self.active_cycles: Dict[str, TradingCycle] = {}
         self.active_symbols: Set[str] = ['BTCUSDT', 'ETHUSDT']
-
         self.client = self._client(api_key, api_secret)
 
     def _client(self, api_key: str, api_secret: str):
@@ -32,11 +29,21 @@ class BotWebsocketManager:
         return "wss://ws-api.testnet.binance.vision/ws-api/v3" if os.getenv("BINANCE_TESTNET") else "wss://ws-api.binance.com/ws-api/v3"
 
     def message_handler(self, _, msg):
-        print(msg)
+        logging.info(msg)
 
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""
+
+        self.client.user_data_start()
+
         # Subscribe to order updates for active bots
+        for bot in self.active_bots.values():
+            self.client.user_data(
+                stream=f"{bot.symbol}@userData",
+                id=f"user_data_{bot.id}"
+            )
+
+        # Subscribe to price updates for active symbols
         for symbol in self.active_symbols:
             self.client.ticker(
                 symbol=symbol,
@@ -108,8 +115,4 @@ class BotWebsocketManager:
                 self.db.add_all(orders)
                 self.db.commit()
             except Exception as e:
-                logger.error(f"Failed to update grid: {e}")
-
-    def _get_listen_key(self) -> str:
-        """Get Binance listen key for user data stream"""
-        return self.trading_service.client.new_listen_key()["listenKey"] 
+                logging.error(f"Failed to update grid: {e}")
