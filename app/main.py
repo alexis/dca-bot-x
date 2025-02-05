@@ -18,7 +18,7 @@ from .services.websocket_manager import BotWebsocketManager
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -50,8 +50,9 @@ async def startup_event():
     bot = db.query(Bot).first()
     trading_service = TradingService(client=client, db=db)
     trading_service.launch(bot)
+    listen_key = client.new_listen_key()["listenKey"]
 
-    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, api_key=os.getenv("BINANCE_API_KEY"), api_secret=os.getenv("BINANCE_API_SECRET"))
+    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, listen_key=listen_key)
     await ws_manager.start()
 
 @app.on_event("shutdown")

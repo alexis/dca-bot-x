@@ -7,8 +7,8 @@ from decimal import Decimal
 import os
 
 @pytest.fixture
-def mock_ws_api_client():
-    with patch('app.services.websocket_manager.SpotWebsocketAPIClient') as mock:
+def mock_ws_client():
+    with patch('app.services.websocket_manager.SpotWebsocketStreamClient') as mock:
         client_instance = Mock()
         client_instance.ticker = Mock()
         mock.return_value = client_instance
@@ -48,23 +48,19 @@ def test_bot(db_session):
     return bot
 
 @pytest.fixture
-def websocket_manager(mock_trading_service, mock_ws_api_client, db_session):
+def websocket_manager(mock_trading_service, mock_ws_client, db_session):
     manager = BotWebsocketManager(
         trading_service=mock_trading_service,
         db=db_session,
-        api_key="test_key",
-        api_secret="test_secret"
+        listen_key="test_listen_key"
     )
     return manager
 
 @pytest.mark.asyncio
-async def test_start_websocket(websocket_manager, mock_ws_api_client):
+async def test_start_websocket(websocket_manager, mock_ws_client):
     await websocket_manager.start()
-    
-    # Verify ticker subscriptions were made for all active symbols
-    assert mock_ws_api_client.ticker.call_count == len(websocket_manager.active_symbols)
-    for symbol in websocket_manager.active_symbols:
-        mock_ws_api_client.ticker.assert_any_call(symbol=symbol)
+
+    mock_ws_client.user_data.assert_called_once_with(listen_key="test_listen_key")
 
 @pytest.mark.asyncio
 async def test_process_buy_order_filled(websocket_manager, mock_trading_service, test_bot, db_session):

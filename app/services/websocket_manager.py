@@ -1,6 +1,6 @@
 import asyncio
 from typing import Dict, Set
-from binance.websocket.spot.websocket_api import SpotWebsocketAPIClient
+from binance.websocket.spot.websocket_stream import SpotWebsocketStreamClient
 from ..models import Bot, TradingCycle, Order
 from .trading_service import TradingService
 from sqlalchemy.orm import Session
@@ -9,24 +9,20 @@ import logging
 import os
 
 class BotWebsocketManager:
-    def __init__(self, trading_service: TradingService, db: Session, api_key: str, api_secret: str):
+    def __init__(self, trading_service: TradingService, db: Session, listen_key: str):
         self.trading_service = trading_service
         self.db = db
         self.active_bots: Dict[str, Bot] = {}
         self.active_cycles: Dict[str, TradingCycle] = {}
         self.active_symbols: Set[str] = ['BTCUSDT', 'ETHUSDT']
-        self.client = self._client(api_key, api_secret)
-
-    def _client(self, api_key: str, api_secret: str):
-        return SpotWebsocketAPIClient(
+        self.listen_key = listen_key
+        self.ws_client = SpotWebsocketStreamClient(
             stream_url=self._stream_url(),
-            api_key=api_key,
-            api_secret=api_secret,
             on_message=self.message_handler
         )
 
     def _stream_url(self):
-        return "wss://ws-api.testnet.binance.vision/ws-api/v3" if os.getenv("BINANCE_TESTNET") else "wss://ws-api.binance.com/ws-api/v3"
+        return "wss://stream.testnet.binance.vision" if os.getenv("BINANCE_TESTNET") else "wss://stream.binance.com"
 
     def message_handler(self, _, msg):
         logging.info(msg)
@@ -34,13 +30,7 @@ class BotWebsocketManager:
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""
 
-        self.client.user_data_start()
-
-        # Subscribe to price updates for active symbols
-        for symbol in self.active_symbols:
-            self.client.ticker(
-                symbol=symbol
-            )
+        self.ws_client.user_data(listen_key=self.listen_key)
 
     def handle_user_data(self, msg: dict):
         """Handle order execution updates"""
