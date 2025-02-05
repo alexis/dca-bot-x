@@ -18,7 +18,7 @@ from .services.websocket_manager import BotWebsocketManager
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 app = FastAPI()
 

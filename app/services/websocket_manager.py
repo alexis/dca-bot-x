@@ -36,17 +36,10 @@ class BotWebsocketManager:
 
         self.client.user_data_start()
 
-        # Subscribe to order updates for active bots
-        for bot in self.active_bots.values():
-            self.client.user_data(
-                stream=f"{bot.symbol}@userData",
-                id=f"user_data_{bot.id}"
-            )
-
         # Subscribe to price updates for active symbols
         for symbol in self.active_symbols:
             self.client.ticker(
-                symbol=symbol,
+                symbol=symbol
             )
 
     def handle_user_data(self, msg: dict):

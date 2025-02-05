@@ -23,7 +23,7 @@ INSERT INTO bots (
     'Test Bot',
     'BINANCE',
     'BTCUSDT',
-    1000.0,                -- amount
+    50.0,                -- amount
     10.0,                  -- grid_length
     1.0,                   -- first_order_offset
     5,                     -- num_orders

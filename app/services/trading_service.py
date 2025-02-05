@@ -42,6 +42,7 @@ class TradingService:
         
         return prices
 
+    # TODO: we need to get the step size from the client dynamically
     def _step_size(self, symbol: str) -> Decimal:
         """Get the step size for a symbol"""
         if symbol == "BTCUSDT":
@@ -76,7 +77,7 @@ class TradingService:
     def create_binance_order(self, bot: Bot, cycle: TradingCycle, side: str, price: Decimal, quantity: Decimal, number: int) -> Order:
         """Create a Binance order and corresponding Order record"""
 
-        if (price * quantity) < 5:
+        if (price * quantity) < 5: # TODO: Make this dynamic
             raise Exception(f"Order notional value {price * quantity} is below minimum {5}")
 
         try:
