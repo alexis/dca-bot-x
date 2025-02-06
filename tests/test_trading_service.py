@@ -342,7 +342,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     order = trading_service.create_binance_order(
         side="BUY",
         price=Decimal('24000.00'),
-        quantity=Decimal('0.02'),
+        quantity=Decimal('0.02000'),
         number=1
     )
     
@@ -352,7 +352,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
         side="BUY",
         type="LIMIT",
         timeInForce="GTC",
-        quantity="0.02",
+        quantity="0.02000",
         price="24000.00"
     )
     

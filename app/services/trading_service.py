@@ -76,8 +76,7 @@ class TradingService:
         # Normalize quantities to match total amount
         total_value = sum(p * q for p, q in zip(prices, quantities))
         scale_factor = amount / total_value
-        step_size = self._step_size(self.bot.symbol)
-        quantities = [(q * scale_factor).quantize(step_size, rounding=ROUND_DOWN) for q in quantities]
+        quantities = [q * scale_factor for q in quantities]
         
         return quantities
 
@@ -87,6 +86,13 @@ class TradingService:
         if (price * quantity) < 5: # TODO: Make this dynamic
             raise Exception(f"Order notional value {price * quantity} is below minimum {5}")
 
+        # rounding
+        quantity = quantity.quantize(self._step_size(self.bot.symbol), rounding=ROUND_DOWN)
+        if self.bot.symbol == "PEPEUSDT":
+            price = round(price, 8)
+        else:
+            price = round(price, 2)
+
         try:
             binance_order = self.client.new_order(
                 symbol=self.bot.symbol,
@@ -94,7 +100,7 @@ class TradingService:
                 type="LIMIT",
                 timeInForce="GTC",
                 quantity=str(quantity),
-                price=str(round(price, 2))
+                price=str(price)
             )
             
             order = Order(
@@ -103,7 +109,7 @@ class TradingService:
                 side=SideType.BUY if side == "BUY" else SideType.SELL,
                 time_in_force=TimeInForceType.GTC,
                 type=OrderType.LIMIT,
-                price=float(round(price, 2)),
+                price=float(price),
                 quantity=float(quantity),
                 amount=float(price * quantity),
                 status=OrderStatusType.NEW,
