@@ -44,7 +44,7 @@ class TradingService:
         
         prices = []
         for i in range(self.bot.num_orders):
-            price = round(first_order_price - (price_step * Decimal(str(i))), 2)
+            price = first_order_price - (price_step * Decimal(str(i)))
             prices.append(price)
         
         return prices
@@ -94,7 +94,7 @@ class TradingService:
                 type="LIMIT",
                 timeInForce="GTC",
                 quantity=str(quantity),
-                price=str(price)
+                price=str(round(price, 2))
             )
             
             order = Order(
@@ -103,7 +103,7 @@ class TradingService:
                 side=SideType.BUY if side == "BUY" else SideType.SELL,
                 time_in_force=TimeInForceType.GTC,
                 type=OrderType.LIMIT,
-                price=float(price),
+                price=float(round(price, 2)),
                 quantity=float(quantity),
                 amount=float(price * quantity),
                 status=OrderStatusType.NEW,
@@ -145,17 +145,12 @@ class TradingService:
         # Calculate take profit price
         take_profit_price = avg_price * (1 + self.bot.profit_percentage / 100)
         
-        try:
-            order = self.create_binance_order(
-                side="SELL",
-                price=Decimal(str(take_profit_price)),
-                quantity=Decimal(str(total_quantity)),
-                number=len(filled_orders) + 1
-            )
-            return order
-            
-        except Exception as e:
-            raise Exception(f"Failed to place take profit order: {e}")
+        return self.create_binance_order(
+            side="SELL",
+            price=Decimal(str(take_profit_price)),
+            quantity=Decimal(str(total_quantity)),
+            number=len(filled_orders) + 1
+        )
 
     def start_new_cycle(self) -> TradingCycle:
         """Start a new trading cycle for the bot"""

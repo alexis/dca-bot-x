@@ -25,7 +25,7 @@ INSERT INTO bots (
     'BTCUSDT',
     50.0,                -- amount
     10.0,                  -- grid_length
-    1.0,                   -- first_order_offset
+    0.1,                   -- first_order_offset
     5,                     -- num_orders
     0,                     -- partial_num_orders
     5.0,                   -- next_order_volume

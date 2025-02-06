@@ -341,7 +341,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     # Test creating a buy order
     order = trading_service.create_binance_order(
         side="BUY",
-        price=Decimal('24000'),
+        price=Decimal('24000.00'),
         quantity=Decimal('0.02'),
         number=1
     )
@@ -353,7 +353,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
         type="LIMIT",
         timeInForce="GTC",
         quantity="0.02",
-        price="24000"
+        price="24000.00"
     )
     
     # Verify Order object was created correctly

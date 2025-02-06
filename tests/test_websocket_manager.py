@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from app.services.websocket_manager import WebsocketManager
-from app.models import Bot, TradingCycle, Order
-from app.enums import OrderStatusType, SideType, TimeInForceType, OrderType, CycleStatusType, ExchangeType, SymbolType
+from app.models import Order
+from app.enums import OrderStatusType, SideType
 from decimal import Decimal
 import os
 import json
@@ -39,6 +39,7 @@ async def test_start_websocket(websocket_manager, mock_ws_client):
     
     # Verify user data subscription was made with listen key
     mock_ws_client.user_data.assert_called_once_with(listen_key="test_listen_key")
+    mock_ws_client.ticker.assert_called()
 
 @pytest.mark.asyncio
 async def test_process_buy_order_filled(websocket_manager, mock_trading_service, test_order):
