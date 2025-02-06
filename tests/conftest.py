@@ -39,11 +39,39 @@ def db_session(db_engine):
 @pytest.fixture
 def mock_binance_client():
     client = Mock()
+    # Mock ticker_price method
     client.ticker_price.return_value = {"price": "25000"}
+    
+    # Mock new_order method
     client.new_order.return_value = {
         "orderId": "123",
-        "status": "NEW"
+        "status": "NEW",
+        "executedQty": "0",
+        "cummulativeQuoteQty": "0"
     }
+    
+    # Mock cancel_order method
+    client.cancel_order.return_value = {
+        "orderId": "123",
+        "status": "CANCELED"
+    }
+    
+    # Mock account method
+    client.account.return_value = {
+        "balances": [
+            {
+                "asset": "BTC",
+                "free": "0.1",
+                "locked": "0.0"
+            }
+        ]
+    }
+    
+    # Mock new_listen_key method
+    client.new_listen_key.return_value = {
+        "listenKey": "test_listen_key"
+    }
+    
     return client
 
 @pytest.fixture
@@ -97,4 +125,6 @@ def test_cycle(db_session, test_bot):
 
 @pytest.fixture
 def trading_service(mock_binance_client, db_session, test_bot):
-    return TradingService(client=mock_binance_client, db=db_session, bot=test_bot) 
+    service = TradingService(db=db_session, bot=test_bot)
+    service.client = mock_binance_client  # Replace the real client with mock
+    return service 

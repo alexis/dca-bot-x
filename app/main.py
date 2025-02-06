@@ -18,7 +18,7 @@ from .services.websocket_manager import WebsocketManager
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 app = FastAPI()
 
@@ -48,9 +48,9 @@ async def startup_event():
     # Initialize trading service and websocket manager
     db = next(get_db())
     bot = db.query(Bot).first()
-    trading_service = TradingService(client=client, db=db, bot=bot)
+    trading_service = TradingService(db=db, bot=bot)
     trading_service.launch()
-    listen_key = client.new_listen_key()["listenKey"]
+    listen_key = trading_service.client.new_listen_key()["listenKey"]
 
     ws_manager = WebsocketManager(bot=bot, trading_service=trading_service, db=db, listen_key=listen_key)
     await ws_manager.start()

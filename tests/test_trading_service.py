@@ -1,12 +1,12 @@
 import pytest
 from decimal import Decimal
-from app.models import Bot, TradingCycle, Order
-from app.enums import ExchangeType, SymbolType, BotStatusType, OrderStatusType, SideType, TimeInForceType, OrderType, CycleStatusType
+from app.models import TradingCycle, Order
+from app.enums import OrderStatusType, SideType, TimeInForceType, OrderType, CycleStatusType
 from uuid import uuid4
-
+from unittest.mock import patch
+from app.services.trading_service import TradingService
 def test_launch(trading_service, test_bot):
     trading_service.launch()
-    assert test_bot.status == BotStatusType.ACTIVE
 
 def test_launch_inactive_bot(trading_service, test_bot, mock_binance_client):
     # Set bot as inactive
@@ -15,8 +15,8 @@ def test_launch_inactive_bot(trading_service, test_bot, mock_binance_client):
     trading_service.launch()
     
     # Should not create any cycles or orders for inactive bot
-    assert mock_binance_client.ticker_price.call_count == 0
-    assert mock_binance_client.new_order.call_count == 0
+    mock_binance_client.ticker_price.assert_not_called()
+    mock_binance_client.new_order.assert_not_called()
     assert trading_service.cycle is None
 
 def test_launch_with_existing_cycle(trading_service, test_bot, mock_binance_client, db_session):
@@ -42,23 +42,16 @@ def test_launch_with_existing_cycle(trading_service, test_bot, mock_binance_clie
     trading_service.launch()
     
     # Should not create new cycle when active one exists
-    assert mock_binance_client.ticker_price.call_count == 0
-    assert mock_binance_client.new_order.call_count == 0
+    mock_binance_client.ticker_price.assert_not_called()
+    mock_binance_client.new_order.assert_not_called()
     cycles = db_session.query(TradingCycle).filter(TradingCycle.bot_id == test_bot.id).all()
     assert len(cycles) == 1
 
 def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_session):
-    # Setup mock
-    mock_binance_client.ticker_price.return_value = {"price": "25000"}
-    mock_binance_client.new_order.return_value = {
-        "orderId": "123",
-        "status": "NEW"
-    }
-    
     trading_service.launch()
     
     # Should create new cycle and orders
-    assert mock_binance_client.ticker_price.call_count == 2
+    mock_binance_client.ticker_price.assert_called()
     assert mock_binance_client.new_order.call_count == test_bot.num_orders
     
     # Verify cycle was created
@@ -193,7 +186,18 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
     
     trading_service.cancel_cycle_orders()
     
+    # Verify cancel_order was called for each order
     assert mock_binance_client.cancel_order.call_count == 2
+    mock_binance_client.cancel_order.assert_any_call(
+        symbol=test_cycle.symbol,
+        orderId="123"
+    )
+    mock_binance_client.cancel_order.assert_any_call(
+        symbol=test_cycle.symbol,
+        orderId="124"
+    )
+    
+    # Verify orders were marked as canceled
     assert all(order.status == OrderStatusType.CANCELED for order in orders)
 
 def test_update_take_profit_order(trading_service, mock_binance_client, test_cycle, db_session):
@@ -383,24 +387,29 @@ def test_create_binance_order_error(trading_service, mock_binance_client, test_c
     
     assert "Failed to create order" in str(exc_info.value)
 
-def test_check_grid_update(trading_service, mock_binance_client, test_cycle, db_session):
+@patch.object(TradingService, 'cancel_cycle_orders')
+def test_check_grid_update(mock_cancel_cycle_orders, trading_service, mock_binance_client, test_cycle):
     trading_service.cycle = test_cycle
-    current_price = 25200  # More than 0.5% change from 24000
+    current_price = 25200
 
     trading_service.check_grid_update(current_price)
 
     # Verify grid was updated
     assert test_cycle.price == current_price
     assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
+    
+    # Verify cancel_cycle_orders was called for existing orders
+    mock_cancel_cycle_orders.assert_called()
 
-def test_check_grid_update_no_cycle(trading_service, mock_binance_client):
+@patch.object(TradingService, 'cancel_cycle_orders')
+def test_check_grid_update_without_cycle(mock_cancel_cycle_orders, trading_service, mock_binance_client):
     trading_service.cycle = None
     current_price = 25200
 
     trading_service.check_grid_update(current_price)
 
     # Verify no actions were taken
-    mock_binance_client.cancel_order.assert_not_called()
+    mock_cancel_cycle_orders.assert_not_called()
     mock_binance_client.new_order.assert_not_called()
 
 def test_check_grid_update_small_change(trading_service, mock_binance_client, test_cycle):

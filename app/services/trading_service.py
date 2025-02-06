@@ -5,10 +5,15 @@ from ..models import Bot, TradingCycle, Order
 from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, CycleStatusType
 from sqlalchemy.orm import Session
 import logging
+import os
 
 class TradingService:
-    def __init__(self, client: Spot, db: Session, bot: Bot):
-        self.client = client
+    def __init__(self, db: Session, bot: Bot):
+        self.client = Spot(
+            api_key=bot.api_key,
+            api_secret=bot.api_secret,
+            base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") else 'https://api.binance.com'
+        )
         self.db = db
         self.bot = bot
         self.cycle = None
@@ -198,7 +203,7 @@ class TradingService:
             Order.cycle_id == self.cycle.id,
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).all()
-        
+
         for order in orders:
             try:
                 self.client.cancel_order(
@@ -268,7 +273,7 @@ class TradingService:
         """Check if grid needs to be updated based on price movement"""
         if not self.cycle:
             return
-            
+
         price_change = abs(current_price - self.cycle.price) / self.cycle.price * 100
         if price_change >= self.bot.price_change_percentage:
             # Cancel existing orders and create new grid
