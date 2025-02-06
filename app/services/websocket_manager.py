@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..enums import OrderStatusType, SideType
 import logging
 import os
-
+import json
 class WebsocketManager:
     def __init__(self, bot: Bot, trading_service: TradingService, db: Session, listen_key: str):
         self.bot = bot
@@ -24,7 +24,16 @@ class WebsocketManager:
         return "wss://stream.testnet.binance.vision" if os.getenv("BINANCE_TESTNET") else "wss://stream.binance.com"
 
     def message_handler(self, _, msg):
-        logging.info(msg)
+        if os.getenv("ENV") == "development":
+            logging.info(msg)
+        
+        json_msg = json.loads(msg)
+        
+        match json_msg.get("e"):
+            case "executionReport":
+                self._handle_execution_report(json_msg)
+            case "24hrTicker":
+                self._handle_price_update(json_msg)
 
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""
@@ -34,12 +43,7 @@ class WebsocketManager:
         for symbol in self.active_symbols:
             self.ws_client.ticker(symbol=symbol)
 
-    def handle_user_data(self, msg: dict):
-        """Handle order execution updates"""
-        if msg.get("e") == "executionReport":
-            self._process_order_update(msg)
-
-    def handle_price_update(self, msg: dict):
+    def _handle_price_update(self, msg: dict):
         """Handle price updates and check if grid needs to be updated"""
         symbol = msg.get("s")
         price = float(msg.get("c", 0))
@@ -47,8 +51,9 @@ class WebsocketManager:
         if self.bot.symbol == symbol:
             self.trading_service.check_grid_update(price)
 
-    def _process_order_update(self, msg: dict):
+    def _handle_execution_report(self, msg: dict):
         """Process order execution updates and manage take profit orders"""
+
         order_id = msg.get("i")
         status = msg.get("X")
         symbol = msg.get("s")
@@ -57,7 +62,7 @@ class WebsocketManager:
         order = self.db.query(Order).filter(
             Order.exchange_order_id == str(order_id)
         ).first()
-        
+
         if order and status == "FILLED":
             # Update order status
             order.status = OrderStatusType.FILLED

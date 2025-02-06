@@ -9,8 +9,8 @@ import os
 
 from app.database import get_db
 from app.services.trading_service import TradingService
-from app.models import Base,Bot, TradingCycle
-from app.enums import ExchangeType, SymbolType, BotStatusType, CycleStatusType
+from app.models import Base,Bot, TradingCycle, Order
+from app.enums import ExchangeType, SymbolType, BotStatusType, CycleStatusType, SideType, OrderType, TimeInForceType, OrderStatusType
 
 # Test database URL
 DATABASE_URL = os.getenv('TEST_DATABASE_URL', "postgresql://postgres:postgres@test-db:5432/test_trading_db")
@@ -122,6 +122,26 @@ def test_cycle(db_session, test_bot):
     db_session.flush()
 
     return cycle
+
+@pytest.fixture
+def test_order(db_session, test_cycle):
+    order = Order(
+        exchange=test_cycle.exchange,
+        symbol=test_cycle.symbol,
+        side=SideType.BUY,
+        type=OrderType.LIMIT,
+        time_in_force=TimeInForceType.GTC,
+        price=Decimal('24000'),
+        quantity=Decimal('0.02'),
+        amount=Decimal('480'),
+        status=OrderStatusType.NEW,
+        number=1,
+        exchange_order_id="123",
+        cycle_id=test_cycle.id
+    )
+    db_session.add(order)
+    db_session.commit()
+    return order
 
 @pytest.fixture
 def trading_service(mock_binance_client, db_session, test_bot):
