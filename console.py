@@ -19,9 +19,8 @@ client = Spot(
     base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") == '1' else 'https://api.binance.com'
 )
 
-# Create trading service
-trading_service = TradingService(client=client, db=db)
 bot = db.query(Bot).first()
+trading_service = TradingService(db=db, bot=bot)
 cycle = db.query(TradingCycle).first()
 
 # Create an IPython shell context

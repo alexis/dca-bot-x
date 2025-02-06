@@ -28,7 +28,11 @@ class WebsocketManager:
 
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""
+
         self.ws_client.user_data(listen_key=self.listen_key)
+
+        for symbol in self.active_symbols:
+            self.ws_client.ticker(symbol=symbol)
 
     def handle_user_data(self, msg: dict):
         """Handle order execution updates"""
