@@ -13,7 +13,7 @@ from .models import Base, Bot
 from .database import engine, get_db
 from .routes import bot
 from .services.trading_service import TradingService
-from .services.websocket_manager import BotWebsocketManager
+from .services.websocket_manager import WebsocketManager
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -48,11 +48,11 @@ async def startup_event():
     # Initialize trading service and websocket manager
     db = next(get_db())
     bot = db.query(Bot).first()
-    trading_service = TradingService(client=client, db=db)
-    trading_service.launch(bot)
+    trading_service = TradingService(client=client, db=db, bot=bot)
+    trading_service.launch()
     listen_key = client.new_listen_key()["listenKey"]
 
-    ws_manager = BotWebsocketManager(trading_service=trading_service, db=db, listen_key=listen_key)
+    ws_manager = WebsocketManager(bot=bot, trading_service=trading_service, db=db, listen_key=listen_key)
     await ws_manager.start()
 
 @app.on_event("shutdown")

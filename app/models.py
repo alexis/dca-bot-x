@@ -36,7 +36,8 @@ class TradingCycle(Base):
     __tablename__ = "trading_cycles"
 
     bot = relationship("Bot", back_populates="trading_cycles")
-
+    orders = relationship("Order", back_populates="cycle")
+    
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bot_id = Column(UUID(as_uuid=True), ForeignKey('bots.id'), nullable=True)
     exchange = Column(String(20), nullable=False)
@@ -56,6 +57,8 @@ class TradingCycle(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+
+    cycle = relationship("TradingCycle", back_populates="orders")
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cycle_id = Column(UUID(as_uuid=True), ForeignKey('trading_cycles.id'), nullable=False)

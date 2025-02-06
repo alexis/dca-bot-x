@@ -5,18 +5,19 @@ from app.enums import ExchangeType, SymbolType, BotStatusType, OrderStatusType, 
 from uuid import uuid4
 
 def test_launch(trading_service, test_bot):
-    trading_service.launch(test_bot)
+    trading_service.launch()
     assert test_bot.status == BotStatusType.ACTIVE
 
 def test_launch_inactive_bot(trading_service, test_bot, mock_binance_client):
     # Set bot as inactive
     test_bot.is_active = False
     
-    trading_service.launch(test_bot)
+    trading_service.launch()
     
     # Should not create any cycles or orders for inactive bot
     assert mock_binance_client.ticker_price.call_count == 0
     assert mock_binance_client.new_order.call_count == 0
+    assert trading_service.cycle is None
 
 def test_launch_with_existing_cycle(trading_service, test_bot, mock_binance_client, db_session):
     # Create an active cycle
@@ -38,7 +39,7 @@ def test_launch_with_existing_cycle(trading_service, test_bot, mock_binance_clie
     db_session.add(active_cycle)
     db_session.commit()
     
-    trading_service.launch(test_bot)
+    trading_service.launch()
     
     # Should not create new cycle when active one exists
     assert mock_binance_client.ticker_price.call_count == 0
@@ -54,7 +55,7 @@ def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_ses
         "status": "NEW"
     }
     
-    trading_service.launch(test_bot)
+    trading_service.launch()
     
     # Should create new cycle and orders
     assert mock_binance_client.ticker_price.call_count == 2
@@ -76,11 +77,11 @@ def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_ses
     assert len(orders) == test_bot.num_orders
     assert all(order.status == OrderStatusType.NEW for order in orders)
 
-def test_calculate_grid_prices(trading_service, test_bot):
+def test_calculate_grid_prices(trading_service):
     market_price = Decimal('25000')
-    prices = trading_service.calculate_grid_prices(market_price, test_bot)
+    prices = trading_service.calculate_grid_prices(market_price)
     
-    assert len(prices) == test_bot.num_orders
+    assert len(prices) == trading_service.bot.num_orders
     assert prices[0] < market_price
     assert prices[-1] < prices[0]
     
@@ -88,32 +89,35 @@ def test_calculate_grid_prices(trading_service, test_bot):
     intervals = [prices[i] - prices[i+1] for i in range(len(prices)-1)]
     assert all(abs(intervals[0] - interval) < Decimal('0.0001') for interval in intervals)
 
-def test_calculate_grid_quantities(trading_service, test_bot):
+def test_calculate_grid_quantities(trading_service):
     prices = [Decimal('25000'), Decimal('24750'), Decimal('24500'), Decimal('24250'), Decimal('24000')]
-    quantities = trading_service.calculate_grid_quantities(prices, test_bot)
+    quantities = trading_service.calculate_grid_quantities(prices)
     
-    assert len(quantities) == test_bot.num_orders
+    assert len(quantities) == trading_service.bot.num_orders
     assert all(q > Decimal('0') for q in quantities)
     assert quantities[1] > quantities[0]  # Check increasing quantities
     
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
-    assert abs(total_investment - test_bot.amount) < 1
+    assert abs(total_investment - trading_service.bot.amount) < 1
 
-def test_place_grid_orders(trading_service, mock_binance_client, test_bot, test_cycle):
-    orders = trading_service.place_grid_orders(test_bot, test_cycle)
+def test_place_grid_orders(trading_service, mock_binance_client, test_cycle):
+    trading_service.cycle = test_cycle
+    orders = trading_service.place_grid_orders()
     
-    assert len(orders) == test_bot.num_orders
+    assert len(orders) == trading_service.bot.num_orders
     assert all(isinstance(order, Order) for order in orders)
     assert all(order.side == SideType.BUY for order in orders)
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+    assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
 
-def test_place_take_profit_order(trading_service, mock_binance_client, test_bot, test_cycle, db_session):
+def test_place_take_profit_order(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
+
     # Create some filled buy orders
     filled_orders = [
         Order(
-            exchange=test_bot.exchange,
-            symbol=test_bot.symbol,
+            exchange=trading_service.bot.exchange,
+            symbol=trading_service.bot.symbol,
             side=SideType.BUY,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
@@ -126,8 +130,8 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_bot,
             number=1
         ),
         Order(
-            exchange=test_bot.exchange,
-            symbol=test_bot.symbol,
+            exchange=trading_service.bot.exchange,
+            symbol=trading_service.bot.symbol,
             side=SideType.BUY,
             price=Decimal('23000'),
             quantity=Decimal('0.02'),
@@ -143,7 +147,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_bot,
     db_session.add_all(filled_orders)
     db_session.commit()
     
-    tp_order = trading_service.place_take_profit_order(test_bot, test_cycle, filled_orders)
+    tp_order = trading_service.place_take_profit_order(filled_orders)
     
     assert isinstance(tp_order, Order)
     assert tp_order.side == SideType.SELL
@@ -152,6 +156,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_bot,
     assert mock_binance_client.new_order.call_count == 1
 
 def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
     # Add some active orders
     orders = [
         Order(
@@ -186,17 +191,18 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
     db_session.add_all(orders)
     db_session.commit()
     
-    trading_service.cancel_cycle_orders(test_cycle)
+    trading_service.cancel_cycle_orders()
     
     assert mock_binance_client.cancel_order.call_count == 2
     assert all(order.status == OrderStatusType.CANCELED for order in orders)
 
-def test_update_take_profit_order(trading_service, mock_binance_client, test_bot, test_cycle, db_session):
+def test_update_take_profit_order(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
     # Create existing take profit order
     existing_tp_order = Order(
         cycle_id=test_cycle.id,
-        exchange=test_bot.exchange,
-        symbol=test_bot.symbol,
+        exchange=trading_service.bot.exchange,
+        symbol=trading_service.bot.symbol,
         side=SideType.SELL,
         price=Decimal('24240'),  # 1% above 24000
         quantity=Decimal('0.02'),
@@ -211,8 +217,8 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_bot
     # Create new filled buy order
     new_filled_order = Order(
         cycle_id=test_cycle.id,
-        exchange=test_bot.exchange,
-        symbol=test_bot.symbol,
+        exchange=trading_service.bot.exchange,
+        symbol=trading_service.bot.symbol,
         side=SideType.BUY,
         price=Decimal('23000'),
         quantity=Decimal('0.03'),
@@ -227,11 +233,11 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_bot
     db_session.add_all([existing_tp_order, new_filled_order])
     db_session.commit()
     
-    trading_service.update_take_profit_order(test_cycle)
+    trading_service.update_take_profit_order()
 
     # Verify the old order was cancelled
     mock_binance_client.cancel_order.assert_called_once_with(
-        symbol=test_bot.symbol,
+        symbol=trading_service.bot.symbol,
         orderId="123"
     )
     
@@ -247,7 +253,8 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_bot
     assert updated_tp is not None
     assert updated_tp.price == Decimal('23230')
 
-def test_check_cycle_completion(trading_service, mock_binance_client, test_bot, test_cycle, db_session):
+def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
     # Add a filled sell order (take profit)
     tp_order = Order(
         exchange=test_cycle.exchange,
@@ -266,13 +273,13 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_bot, 
     db_session.add(tp_order)
     db_session.commit()
     
-    trading_service.check_cycle_completion(test_cycle)
+    trading_service.check_cycle_completion()
     
     assert test_cycle.status == CycleStatusType.COMPLETED
     # Should try to start a new cycle since bot is active
     assert mock_binance_client.ticker_price.call_count == 2
 
-def test_start_new_cycle(trading_service, mock_binance_client, test_bot):
+def test_start_new_cycle(trading_service, mock_binance_client):
     # Setup mock
     mock_binance_client.ticker_price.return_value = {"price": "25000"}
     mock_binance_client.new_order.return_value = {
@@ -280,43 +287,44 @@ def test_start_new_cycle(trading_service, mock_binance_client, test_bot):
         "status": "NEW"
     }
     
-    cycle = trading_service.start_new_cycle(test_bot)
+    cycle = trading_service.start_new_cycle()
     
     assert cycle is not None
-    assert cycle.exchange == test_bot.exchange
-    assert cycle.symbol == test_bot.symbol
-    assert cycle.amount == test_bot.amount
-    assert cycle.bot_id == test_bot.id
+    assert cycle.exchange == trading_service.bot.exchange
+    assert cycle.symbol == trading_service.bot.symbol
+    assert cycle.amount == trading_service.bot.amount
+    assert cycle.bot_id == trading_service.bot.id
     assert cycle.status == CycleStatusType.ACTIVE
     
     # Verify orders were placed
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+    assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
 
-def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client, test_bot, db_session):
+def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client, db_session):
     # Create an active cycle
     active_cycle = TradingCycle(
-        exchange=test_bot.exchange,
-        symbol=test_bot.symbol,
-        amount=test_bot.amount,
-        grid_length=test_bot.grid_length,
-        first_order_offset=test_bot.first_order_offset,
-        num_orders=test_bot.num_orders,
+        exchange=trading_service.bot.exchange,
+        symbol=trading_service.bot.symbol,
+        amount=trading_service.bot.amount,
+        grid_length=trading_service.bot.grid_length,
+        first_order_offset=trading_service.bot.first_order_offset,
+        num_orders=trading_service.bot.num_orders,
         partial_num_orders=0,
-        next_order_volume=test_bot.next_order_volume,
+        next_order_volume=trading_service.bot.next_order_volume,
         price=Decimal('25000'),
-        profit_percentage=test_bot.profit_percentage,
-        price_change_percentage=test_bot.price_change_percentage,
+        profit_percentage=trading_service.bot.profit_percentage,
+        price_change_percentage=trading_service.bot.price_change_percentage,
         status=CycleStatusType.ACTIVE,
-        bot_id=test_bot.id
+        bot_id=trading_service.bot.id
     )
     db_session.add(active_cycle)
     db_session.commit()
     
     # Try to start a new cycle
-    with pytest.raises(ValueError, match=f"Bot {test_bot.name} already has an active cycle"):
-        trading_service.start_new_cycle(test_bot) 
+    with pytest.raises(ValueError, match=f"Bot {trading_service.bot.name} already has an active cycle"):
+        trading_service.start_new_cycle()
 
-def test_create_binance_order_success(trading_service, mock_binance_client, test_bot, test_cycle):
+def test_create_binance_order_success(trading_service, mock_binance_client, test_cycle):
+    trading_service.cycle = test_cycle
     # Setup mock response
     mock_binance_order = {
         "orderId": "12345",
@@ -328,8 +336,6 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     
     # Test creating a buy order
     order = trading_service.create_binance_order(
-        bot=test_bot,
-        cycle=test_cycle,
         side="BUY",
         price=Decimal('24000'),
         quantity=Decimal('0.02'),
@@ -338,7 +344,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     
     # Verify Binance API was called correctly
     mock_binance_client.new_order.assert_called_once_with(
-        symbol=test_bot.symbol,
+        symbol=trading_service.bot.symbol,
         side="BUY",
         type="LIMIT",
         timeInForce="GTC",
@@ -347,8 +353,8 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     )
     
     # Verify Order object was created correctly
-    assert order.exchange == test_bot.exchange
-    assert order.symbol == test_bot.symbol
+    assert order.exchange == trading_service.bot.exchange
+    assert order.symbol == trading_service.bot.symbol
     assert order.side == SideType.BUY
     assert order.type == OrderType.LIMIT
     assert order.time_in_force == TimeInForceType.GTC
@@ -361,15 +367,14 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     assert order.exchange_order_data == mock_binance_order
     assert order.cycle_id == test_cycle.id
 
-def test_create_binance_order_error(trading_service, mock_binance_client, test_bot, test_cycle):
+def test_create_binance_order_error(trading_service, mock_binance_client, test_cycle):
+    trading_service.cycle = test_cycle
     # Setup mock to raise an exception
     mock_binance_client.new_order.side_effect = Exception("API Error")
     
     # Test that the error is propagated
     with pytest.raises(Exception) as exc_info:
         trading_service.create_binance_order(
-            bot=test_bot,
-            cycle=test_cycle,
             side="BUY",
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
@@ -378,1380 +383,33 @@ def test_create_binance_order_error(trading_service, mock_binance_client, test_b
     
     assert "Failed to create order" in str(exc_info.value)
 
-def test_place_grid_orders(trading_service, mock_binance_client, test_bot, test_cycle):
-    orders = trading_service.place_grid_orders(test_bot, test_cycle)
-    
-    assert len(orders) == test_bot.num_orders
-    assert all(isinstance(order, Order) for order in orders)
-    assert all(order.side == SideType.BUY for order in orders)
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+def test_check_grid_update(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
+    current_price = 25200  # More than 0.5% change from 24000
 
-    # Add more specific assertions based on your implementation
-    # For example, you can check if the orders are correctly placed in the grid
+    trading_service.check_grid_update(current_price)
 
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
+    # Verify grid was updated
+    assert test_cycle.price == current_price
+    assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
 
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+def test_check_grid_update_no_cycle(trading_service, mock_binance_client):
+    trading_service.cycle = None
+    current_price = 25200
 
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
+    trading_service.check_grid_update(current_price)
 
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+    # Verify no actions were taken
+    mock_binance_client.cancel_order.assert_not_called()
+    mock_binance_client.new_order.assert_not_called()
 
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
+def test_check_grid_update_small_change(trading_service, mock_binance_client, test_cycle):
+    trading_service.cycle = test_cycle
+    current_price = 24010  # Less than 0.5% change from 24000
 
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
+    trading_service.check_grid_update(current_price)
 
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
-    # to return specific responses for each order. This is more complex and might require
-    # a different approach to fully test the place_grid_orders method.
-
-    # For now, we'll keep the existing assertions
-    assert mock_binance_client.new_order.call_count == test_bot.num_orders
-
-    # If you want to test the actual placement logic, you might need to mock the Binance API
+    # Verify no grid update was performed
+    mock_binance_client.cancel_order.assert_not_called()
+    mock_binance_client.new_order.assert_not_called()
+    assert test_cycle.price == 24000  # Price should remain unchanged

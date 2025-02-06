@@ -96,5 +96,5 @@ def test_cycle(db_session, test_bot):
     return cycle
 
 @pytest.fixture
-def trading_service(mock_binance_client, db_session):
-    return TradingService(client=mock_binance_client, db=db_session) 
+def trading_service(mock_binance_client, db_session, test_bot):
+    return TradingService(client=mock_binance_client, db=db_session, bot=test_bot) 

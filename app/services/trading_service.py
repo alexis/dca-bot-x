@@ -7,36 +7,38 @@ from sqlalchemy.orm import Session
 import logging
 
 class TradingService:
-    def __init__(self, client: Spot, db: Session):
+    def __init__(self, client: Spot, db: Session, bot: Bot):
         self.client = client
         self.db = db
+        self.bot = bot
+        self.cycle = None
 
-    def launch(self, bot: Bot):
+    def launch(self):
         """Launch a new trading cycle for the bot"""
 
-        if not bot.is_active: return
+        if not self.bot.is_active: return
 
         # Check if bot has an active cycle
-        active_cycle = self.db.query(TradingCycle).filter(
-            TradingCycle.bot_id == bot.id,
+        self.cycle = self.db.query(TradingCycle).filter(
+            TradingCycle.bot_id == self.bot.id,
             TradingCycle.status == CycleStatusType.ACTIVE
         ).first()
 
-        if not active_cycle:
-            self.start_new_cycle(bot)
+        if not self.cycle:
+            self.start_new_cycle()
 
-    def calculate_grid_prices(self, market_price: Decimal, bot: Bot) -> List[Decimal]:
+    def calculate_grid_prices(self, market_price: Decimal) -> List[Decimal]:
         """Calculate grid order prices"""
         # Convert bot parameters to Decimal to ensure consistent arithmetic
-        first_order_offset = Decimal(str(bot.first_order_offset))
-        grid_length = Decimal(str(bot.grid_length))
+        first_order_offset = Decimal(str(self.bot.first_order_offset))
+        grid_length = Decimal(str(self.bot.grid_length))
         
         first_order_price = market_price * (Decimal('1') - first_order_offset / Decimal('100'))
         total_drop = first_order_price * (grid_length / Decimal('100'))
-        price_step = total_drop / (Decimal(str(bot.num_orders - 1))) if bot.num_orders > 1 else Decimal('0')
+        price_step = total_drop / (Decimal(str(self.bot.num_orders - 1))) if self.bot.num_orders > 1 else Decimal('0')
         
         prices = []
-        for i in range(bot.num_orders):
+        for i in range(self.bot.num_orders):
             price = round(first_order_price - (price_step * Decimal(str(i))), 2)
             prices.append(price)
         
@@ -52,29 +54,29 @@ class TradingService:
         else:
             raise ValueError(f"Unsupported symbol: {symbol}")
 
-    def calculate_grid_quantities(self, prices: List[Decimal], bot: Bot) -> List[Decimal]:
+    def calculate_grid_quantities(self, prices: List[Decimal]) -> List[Decimal]:
         """Calculate quantities for each grid level"""
         # Convert bot parameters to Decimal
-        amount = Decimal(str(bot.amount))
-        next_order_volume = Decimal(str(bot.next_order_volume))
+        amount = Decimal(str(self.bot.amount))
+        next_order_volume = Decimal(str(self.bot.next_order_volume))
         
         base_quantity = amount / sum(prices)  # Initial equal distribution
         quantities = []
         
         current_quantity = base_quantity
-        for _ in range(bot.num_orders):
+        for _ in range(self.bot.num_orders):
             quantities.append(current_quantity)
             current_quantity *= (Decimal('1') + next_order_volume / Decimal('100'))
             
         # Normalize quantities to match total amount
         total_value = sum(p * q for p, q in zip(prices, quantities))
         scale_factor = amount / total_value
-        step_size = self._step_size(bot.symbol)
+        step_size = self._step_size(self.bot.symbol)
         quantities = [(q * scale_factor).quantize(step_size, rounding=ROUND_DOWN) for q in quantities]
         
         return quantities
 
-    def create_binance_order(self, bot: Bot, cycle: TradingCycle, side: str, price: Decimal, quantity: Decimal, number: int) -> Order:
+    def create_binance_order(self, side: str, price: Decimal, quantity: Decimal, number: int) -> Order:
         """Create a Binance order and corresponding Order record"""
 
         if (price * quantity) < 5: # TODO: Make this dynamic
@@ -82,7 +84,7 @@ class TradingService:
 
         try:
             binance_order = self.client.new_order(
-                symbol=bot.symbol,
+                symbol=self.bot.symbol,
                 side=side,
                 type="LIMIT",
                 timeInForce="GTC",
@@ -91,8 +93,8 @@ class TradingService:
             )
             
             order = Order(
-                exchange=bot.exchange,
-                symbol=bot.symbol,
+                exchange=self.bot.exchange,
+                symbol=self.bot.symbol,
                 side=SideType.BUY if side == "BUY" else SideType.SELL,
                 time_in_force=TimeInForceType.GTC,
                 type=OrderType.LIMIT,
@@ -103,24 +105,22 @@ class TradingService:
                 number=number,
                 exchange_order_id=binance_order["orderId"],
                 exchange_order_data=binance_order,
-                cycle_id=cycle.id
+                cycle_id=self.cycle.id
             )
             return order
             
         except Exception as e:
             raise Exception(f"Failed to create order: {e}")
 
-    def place_grid_orders(self, bot: Bot, cycle: TradingCycle) -> List[Order]:
+    def place_grid_orders(self) -> List[Order]:
         """Place initial grid orders"""
-        market_price = Decimal(self.client.ticker_price(symbol=bot.symbol)["price"])
-        prices = self.calculate_grid_prices(market_price, bot)
-        quantities = self.calculate_grid_quantities(prices, bot)
+        market_price = Decimal(self.client.ticker_price(symbol=self.bot.symbol)["price"])
+        prices = self.calculate_grid_prices(market_price)
+        quantities = self.calculate_grid_quantities(prices)
         
         orders = []
         for i, (price, quantity) in enumerate(zip(prices, quantities)):
             order = self.create_binance_order(
-                bot=bot,
-                cycle=cycle,
                 side="BUY",
                 price=price,
                 quantity=quantity,
@@ -130,7 +130,7 @@ class TradingService:
                 
         return orders
 
-    def place_take_profit_order(self, bot: Bot, cycle: TradingCycle, filled_orders: List[Order]) -> Order:
+    def place_take_profit_order(self, filled_orders: List[Order]) -> Order:
         """Place or update take profit order"""
         # Calculate average entry price and total quantity
         total_quantity = sum(order.quantity for order in filled_orders)
@@ -138,12 +138,10 @@ class TradingService:
         avg_price = total_cost / total_quantity
         
         # Calculate take profit price
-        take_profit_price = avg_price * (1 + bot.profit_percentage / 100)
+        take_profit_price = avg_price * (1 + self.bot.profit_percentage / 100)
         
         try:
             order = self.create_binance_order(
-                bot=bot,
-                cycle=cycle,
                 side="SELL",
                 price=Decimal(str(take_profit_price)),
                 quantity=Decimal(str(total_quantity)),
@@ -154,56 +152,50 @@ class TradingService:
         except Exception as e:
             raise Exception(f"Failed to place take profit order: {e}")
 
-    def start_new_cycle(self, bot: Bot) -> TradingCycle:
+    def start_new_cycle(self) -> TradingCycle:
         """Start a new trading cycle for the bot"""
         # Check for existing active cycle
         active_cycle = self.db.query(TradingCycle).filter(
-            TradingCycle.bot_id == bot.id,
+            TradingCycle.bot_id == self.bot.id,
             TradingCycle.status == CycleStatusType.ACTIVE
         ).first()
         
         if active_cycle:
-            raise ValueError(f"Bot {bot.name} already has an active cycle")
+            raise ValueError(f"Bot {self.bot.name} already has an active cycle")
 
-        market_price = Decimal(self.client.ticker_price(symbol=bot.symbol)["price"])
+        market_price = Decimal(self.client.ticker_price(symbol=self.bot.symbol)["price"])
         
-        cycle = TradingCycle(
-            exchange=bot.exchange,
-            symbol=bot.symbol,
-            amount=bot.amount,
-            grid_length=bot.grid_length,
-            first_order_offset=bot.first_order_offset,
-            num_orders=bot.num_orders,
+        self.cycle = TradingCycle(
+            exchange=self.bot.exchange,
+            symbol=self.bot.symbol,
+            amount=self.bot.amount,
+            grid_length=self.bot.grid_length,
+            first_order_offset=self.bot.first_order_offset,
+            num_orders=self.bot.num_orders,
             partial_num_orders=0,
-            next_order_volume=bot.next_order_volume,
+            next_order_volume=self.bot.next_order_volume,
             price=market_price,
-            profit_percentage=bot.profit_percentage,
-            price_change_percentage=bot.price_change_percentage,
+            profit_percentage=self.bot.profit_percentage,
+            price_change_percentage=self.bot.price_change_percentage,
             status=CycleStatusType.ACTIVE,
-            bot_id=bot.id
+            bot_id=self.bot.id
         )
         
-        self.db.add(cycle)
+        self.db.add(self.cycle)
         self.db.commit()
-        self.db.refresh(cycle)
+        self.db.refresh(self.cycle)
         
-        try:
-            # Place initial grid orders
-            orders = self.place_grid_orders(bot, cycle)
-            self.db.add_all(orders)
-            self.db.commit()
-            
-            return cycle
-        except Exception as e:
-            # Rollback cycle creation if order placement fails
-            self.db.delete(cycle)
-            self.db.commit()
-            raise e
+        # Place initial grid orders
+        orders = self.place_grid_orders()
+        self.db.add_all(orders)
+        self.db.commit()
 
-    def cancel_cycle_orders(self, cycle: TradingCycle):
+        return self.cycle
+
+    def cancel_cycle_orders(self):
         """Cancel all active orders in a cycle"""
         orders = self.db.query(Order).filter(
-            Order.cycle_id == cycle.id,
+            Order.cycle_id == self.cycle.id,
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).all()
         
@@ -219,17 +211,17 @@ class TradingService:
         
         self.db.commit()
 
-    def update_take_profit_order(self, cycle: TradingCycle):
+    def update_take_profit_order(self):
         """Update or place take profit order after a buy order is filled"""
         filled_orders = self.db.query(Order).filter(
-            Order.cycle_id == cycle.id,
+            Order.cycle_id == self.cycle.id,
             Order.side == SideType.BUY,
             Order.status == OrderStatusType.FILLED
         ).all()
         
         # Cancel existing take profit order if exists
         existing_tp = self.db.query(Order).filter(
-            Order.cycle_id == cycle.id,
+            Order.cycle_id == self.cycle.id,
             Order.side == SideType.SELL,
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).first()
@@ -246,28 +238,50 @@ class TradingService:
                 logging.error(f"Failed to cancel take profit order: {e}")
         
         # Place new take profit order
-        new_tp = self.place_take_profit_order(cycle.bot, cycle, filled_orders)
+        new_tp = self.place_take_profit_order(filled_orders)
         self.db.add(new_tp)
         self.db.commit()
 
-    def check_cycle_completion(self, cycle: TradingCycle):
+    def check_cycle_completion(self):
         """Check if cycle is completed and can be closed"""
         # Check if take profit order is filled
         tp_order = self.db.query(Order).filter(
-            Order.cycle_id == cycle.id,
+            Order.cycle_id == self.cycle.id,
             Order.side == SideType.SELL,
             Order.status == OrderStatusType.FILLED
         ).first()
         
         if tp_order:
             # Cancel remaining buy orders
-            self.cancel_cycle_orders(cycle)
+            self.cancel_cycle_orders()
             
             # Mark cycle as completed
-            cycle.status = CycleStatusType.COMPLETED
+            self.cycle.status = CycleStatusType.COMPLETED
             self.db.commit()
             
             # Start new cycle if bot is still active
-            bot = self.db.query(Bot).filter(Bot.id == cycle.bot_id).first()
+            bot = self.db.query(Bot).filter(Bot.id == self.cycle.bot_id).first()
             if bot and bot.is_active:
-                self.start_new_cycle(bot) 
+                self.start_new_cycle()
+
+    def check_grid_update(self, current_price: float):
+        """Check if grid needs to be updated based on price movement"""
+        if not self.cycle:
+            return
+            
+        price_change = abs(current_price - self.cycle.price) / self.cycle.price * 100
+        if price_change >= self.bot.price_change_percentage:
+            # Cancel existing orders and create new grid
+            self.cancel_cycle_orders()
+            
+            # Update cycle price
+            self.cycle.price = current_price
+            self.db.commit()
+            
+            # Place new grid orders
+            try:
+                orders = self.place_grid_orders()
+                self.db.add_all(orders)
+                self.db.commit()
+            except Exception as e:
+                logging.error(f"Failed to update grid: {e}")
