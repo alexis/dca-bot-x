@@ -7,6 +7,7 @@ class ExchangeType(str, Enum):
 class SymbolType(str, Enum):
     BTC_USDT = "BTCUSDT"
     ETH_USDT = "ETHUSDT"
+    PEPE_USDT = "PEPEUSDT"
     # Add other trading pairs as needed
 
 class BotStatusType(str, Enum):

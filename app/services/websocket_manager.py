@@ -4,16 +4,17 @@ from binance.websocket.spot.websocket_stream import SpotWebsocketStreamClient
 from ..models import Bot, Order
 from .trading_service import TradingService
 from sqlalchemy.orm import Session
-from ..enums import OrderStatusType, SideType
+from ..enums import OrderStatusType, SideType, SymbolType
 import logging
 import os
 import json
+
 class WebsocketManager:
     def __init__(self, bot: Bot, trading_service: TradingService, db: Session, listen_key: str):
         self.bot = bot
         self.trading_service = trading_service
         self.db = db
-        self.active_symbols: Set[str] = ['BTCUSDT', 'ETHUSDT']
+        self.active_symbols: Set[str] = {symbol.value for symbol in SymbolType}
         self.listen_key = listen_key
         self.ws_client = SpotWebsocketStreamClient(
             stream_url=self._stream_url(),
@@ -70,8 +71,6 @@ class WebsocketManager:
             self.db.commit()
             
             if order.side == SideType.BUY:
-                # Update take profit order
                 self.trading_service.update_take_profit_order()
             elif order.side == SideType.SELL:
-                # Check if cycle is completed
                 self.trading_service.check_cycle_completion()
