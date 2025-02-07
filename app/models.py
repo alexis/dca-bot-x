@@ -10,7 +10,7 @@ Base = declarative_base()
 class Bot(Base):
     __tablename__ = "bots"
 
-    trading_cycles = relationship("TradingCycle", back_populates="bot")
+    trading_cycles = relationship("TradingCycle", back_populates="bot", lazy="dynamic")
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(100), nullable=False)
@@ -36,7 +36,7 @@ class TradingCycle(Base):
     __tablename__ = "trading_cycles"
 
     bot = relationship("Bot", back_populates="trading_cycles")
-    orders = relationship("Order", back_populates="cycle")
+    orders = relationship("Order", back_populates="cycle", lazy="dynamic")
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bot_id = Column(UUID(as_uuid=True), ForeignKey('bots.id'), nullable=True)
@@ -59,14 +59,12 @@ class TradingCycle(Base):
         if self.status == CycleStatusType.COMPLETED:
             session = Session.object_session(self)
 
-            buy_orders = session.query(Order).filter(
-                Order.cycle_id == self.id,
+            buy_orders = self.orders.filter(
                 Order.side == SideType.BUY,
                 Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
             ).all()
 
-            sell_orders = session.query(Order).filter(
-                Order.cycle_id == self.id,
+            sell_orders = self.orders.filter(
                 Order.side == SideType.SELL,
                 Order.status == OrderStatusType.FILLED
             ).all()

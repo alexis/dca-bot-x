@@ -27,8 +27,7 @@ def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_ses
     assert mock_binance_client.new_order.call_count == test_bot.num_orders
     
     # Verify cycle was created
-    cycle = db_session.query(TradingCycle).filter(
-        TradingCycle.bot_id == test_bot.id,
+    cycle = test_bot.trading_cycles.filter(
         TradingCycle.status == CycleStatusType.ACTIVE
     ).first()
 
@@ -221,8 +220,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
     assert mock_binance_client.new_order.call_count == 1
     
     # Check that old TP order is canceled and new one is created
-    updated_tp = db_session.query(Order).filter(
-        Order.cycle_id == test_cycle.id,
+    updated_tp = test_cycle.orders.filter(
         Order.side == SideType.SELL,
         Order.status == OrderStatusType.NEW
     ).first()
@@ -453,9 +451,7 @@ def test_query_open_orders(trading_service, mock_binance_client, test_cycle, db_
     )
 
     # Verify order statuses were updated
-    updated_orders = db_session.query(Order).filter(
-        Order.cycle_id == test_cycle.id
-    ).order_by(Order.exchange_order_id).all()
+    updated_orders = test_cycle.orders.order_by(Order.exchange_order_id).all()
 
     assert updated_orders[0].status == "FILLED"
     assert updated_orders[1].status == "PARTIALLY_FILLED"

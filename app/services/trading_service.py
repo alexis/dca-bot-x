@@ -16,8 +16,7 @@ class TradingService:
         )
         self.db = db
         self.bot = bot
-        self.cycle = self.db.query(TradingCycle).filter(
-            TradingCycle.bot_id == self.bot.id,
+        self.cycle = bot.trading_cycles.filter(
             TradingCycle.status == CycleStatusType.ACTIVE
         ).first()
 
@@ -161,8 +160,7 @@ class TradingService:
     def start_new_cycle(self) -> TradingCycle:
         """Start a new trading cycle for the bot"""
         # Check for existing active cycle
-        active_cycle = self.db.query(TradingCycle).filter(
-            TradingCycle.bot_id == self.bot.id,
+        active_cycle = self.bot.trading_cycles.filter(
             TradingCycle.status == CycleStatusType.ACTIVE
         ).first()
         
@@ -200,8 +198,7 @@ class TradingService:
 
     def cancel_cycle_orders(self):
         """Cancel all active orders in a cycle"""
-        orders = self.db.query(Order).filter(
-            Order.cycle_id == self.cycle.id,
+        orders = self.cycle.orders.filter(
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).all()
 
@@ -219,15 +216,13 @@ class TradingService:
 
     def update_take_profit_order(self):
         """Update or place take profit order after a buy order is filled"""
-        filled_orders = self.db.query(Order).filter(
-            Order.cycle_id == self.cycle.id,
+        filled_orders = self.cycle.orders.filter(
             Order.side == SideType.BUY,
             Order.status == OrderStatusType.FILLED
         ).all()
         
         # Cancel existing take profit order if exists
-        existing_tp = self.db.query(Order).filter(
-            Order.cycle_id == self.cycle.id,
+        existing_tp = self.cycle.orders.filter(
             Order.side == SideType.SELL,
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).first()
@@ -251,8 +246,7 @@ class TradingService:
     def check_cycle_completion(self):
         """Check if cycle is completed and can be closed"""
         # Check if take profit order is filled
-        tp_order = self.db.query(Order).filter(
-            Order.cycle_id == self.cycle.id,
+        tp_order = self.cycle.orders.filter(
             Order.side == SideType.SELL,
             Order.status == OrderStatusType.FILLED
         ).first()
@@ -266,8 +260,7 @@ class TradingService:
             self.db.commit()
             
             # Start new cycle if bot is still active
-            bot = self.db.query(Bot).filter(Bot.id == self.cycle.bot_id).first()
-            if bot and bot.is_active:
+            if self.bot.is_active:
                 self.start_new_cycle()
 
     def check_grid_update(self, current_price: float):
@@ -295,8 +288,7 @@ class TradingService:
 
     def query_open_orders(self):
         """Query open orders for the cycle"""
-        orders = self.db.query(Order).filter(
-            Order.cycle_id == self.cycle.id,
+        orders = self.cycle.orders.filter(
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).all()
 
