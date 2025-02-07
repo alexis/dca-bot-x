@@ -55,6 +55,8 @@ class TradingService:
             return Decimal('0.00001')
         elif symbol == "ETHUSDT":
             return Decimal('0.0001')
+        elif symbol == "PEPEUSDT":
+            return Decimal('0.00000001')
         else:
             raise ValueError(f"Unsupported symbol: {symbol}")
 
@@ -138,7 +140,8 @@ class TradingService:
             )
             orders.append(order)
                 
-        return orders
+        self.db.add_all(orders)
+        self.db.commit()
 
     def place_take_profit_order(self, filled_orders: List[Order]) -> Order:
         """Place or update take profit order"""
@@ -190,9 +193,7 @@ class TradingService:
         self.db.refresh(self.cycle)
         
         # Place initial grid orders
-        orders = self.place_grid_orders()
-        self.db.add_all(orders)
-        self.db.commit()
+        self.place_grid_orders()
 
         return self.cycle
 
@@ -208,11 +209,11 @@ class TradingService:
                     symbol=order.symbol,
                     orderId=order.exchange_order_id
                 )
-                order.status = OrderStatusType.CANCELED
             except Exception as e:
                 logging.error(f"Failed to cancel order {order.exchange_order_id}: {e}")
-        
-        self.db.commit()
+
+            order.status = OrderStatusType.CANCELED
+            self.db.commit()
 
     def update_take_profit_order(self):
         """Update or place take profit order after a buy order is filled"""
@@ -233,10 +234,11 @@ class TradingService:
                     symbol=existing_tp.symbol,
                     orderId=existing_tp.exchange_order_id
                 )
-                existing_tp.status = OrderStatusType.CANCELED
-                self.db.commit()
             except Exception as e:
                 logging.error(f"Failed to cancel take profit order: {e}")
+
+            existing_tp.status = OrderStatusType.CANCELED
+            self.db.commit()
         
         # Place new take profit order
         new_tp = self.place_take_profit_order(filled_orders)
@@ -268,7 +270,7 @@ class TradingService:
         if not self.cycle:
             return
 
-        price_change = abs(current_price - self.cycle.price) / self.cycle.price * 100
+        price_change = (current_price - self.cycle.price) / self.cycle.price * 100
 
         # Update cycle price
         self.cycle.price = current_price
@@ -280,9 +282,7 @@ class TradingService:
 
             # Place new grid orders
             try:
-                orders = self.place_grid_orders()
-                self.db.add_all(orders)
-                self.db.commit()
+                self.place_grid_orders()
             except Exception as e:
                 logging.error(f"Failed to update grid: {e}")
 

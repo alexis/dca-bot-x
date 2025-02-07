@@ -67,11 +67,11 @@ def test_calculate_grid_quantities(trading_service):
 
 def test_place_grid_orders(trading_service, mock_binance_client, test_cycle):
     trading_service.cycle = test_cycle
-    orders = trading_service.place_grid_orders()
+    trading_service.place_grid_orders()
     
-    assert len(orders) == trading_service.bot.num_orders
-    assert all(isinstance(order, Order) for order in orders)
-    assert all(order.side == SideType.BUY for order in orders)
+    assert test_cycle.orders.count() == trading_service.bot.num_orders
+    assert all(isinstance(order, Order) for order in test_cycle.orders)
+    assert all(order.side == SideType.BUY for order in test_cycle.orders)
     assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
 
 def test_place_take_profit_order(trading_service, mock_binance_client, test_cycle, db_session):

@@ -29,6 +29,7 @@ class WebsocketManager:
         
         match json_msg.get("e"):
             case "executionReport":
+                if os.getenv("ENV") == "development": logging.info(msg)
                 self._handle_execution_report(json_msg)
             case "24hrTicker":
                 self._handle_price_update(json_msg)

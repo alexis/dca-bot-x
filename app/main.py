@@ -39,8 +39,6 @@ client = Spot(
 )
 logging.info(f"Using {client.base_url} for Binance API")
 
-ws_manager = None
-
 @app.on_event("startup")
 async def startup_event():
     global ws_manager
