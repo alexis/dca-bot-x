@@ -25,9 +25,6 @@ class WebsocketManager:
         return "wss://stream.testnet.binance.vision" if os.getenv("BINANCE_TESTNET") else "wss://stream.binance.com"
 
     def message_handler(self, _, msg):
-        if os.getenv("ENV") == "development":
-            logging.info(msg)
-        
         json_msg = json.loads(msg)
         
         match json_msg.get("e"):
@@ -35,6 +32,8 @@ class WebsocketManager:
                 self._handle_execution_report(json_msg)
             case "24hrTicker":
                 self._handle_price_update(json_msg)
+            case _:
+                if os.getenv("ENV") == "development": logging.info(msg)
 
     async def start(self):
         """Start WebSocket connection and subscribe to relevant streams"""

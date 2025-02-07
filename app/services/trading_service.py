@@ -16,20 +16,20 @@ class TradingService:
         )
         self.db = db
         self.bot = bot
-        self.cycle = None
+        self.cycle = self.db.query(TradingCycle).filter(
+            TradingCycle.bot_id == self.bot.id,
+            TradingCycle.status == CycleStatusType.ACTIVE
+        ).first()
 
     def launch(self):
         """Launch a new trading cycle for the bot"""
 
         if not self.bot.is_active: return
 
-        # Check if bot has an active cycle
-        self.cycle = self.db.query(TradingCycle).filter(
-            TradingCycle.bot_id == self.bot.id,
-            TradingCycle.status == CycleStatusType.ACTIVE
-        ).first()
-
-        if not self.cycle:
+        if self.cycle:
+            self.query_open_orders()
+            self.check_cycle_completion()
+        else:
             self.start_new_cycle()
 
     def calculate_grid_prices(self, market_price: Decimal) -> List[Decimal]:
@@ -143,11 +143,11 @@ class TradingService:
 
     def place_take_profit_order(self, filled_orders: List[Order]) -> Order:
         """Place or update take profit order"""
-        # Calculate average entry price and total quantity
+        # Calculate average buy price and total quantity
         total_quantity = sum(order.quantity for order in filled_orders)
         total_cost = sum(order.price * order.quantity for order in filled_orders)
         avg_price = total_cost / total_quantity
-        
+
         # Calculate take profit price
         take_profit_price = avg_price * (1 + self.bot.profit_percentage / 100)
         
@@ -276,14 +276,15 @@ class TradingService:
             return
 
         price_change = abs(current_price - self.cycle.price) / self.cycle.price * 100
+
+        # Update cycle price
+        self.cycle.price = current_price
+        self.db.commit()
+
         if price_change >= self.bot.price_change_percentage:
             # Cancel existing orders and create new grid
             self.cancel_cycle_orders()
-            
-            # Update cycle price
-            self.cycle.price = current_price
-            self.db.commit()
-            
+
             # Place new grid orders
             try:
                 orders = self.place_grid_orders()
@@ -291,3 +292,26 @@ class TradingService:
                 self.db.commit()
             except Exception as e:
                 logging.error(f"Failed to update grid: {e}")
+
+    def query_open_orders(self):
+        """Query open orders for the cycle"""
+        orders = self.db.query(Order).filter(
+            Order.cycle_id == self.cycle.id,
+            Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
+        ).all()
+
+        for order in orders:
+            try:
+                binance_order = self.client.get_order(
+                    symbol=order.symbol,
+                    orderId=order.exchange_order_id
+                )
+
+                if binance_order["status"] != order.status:
+                    order.status = binance_order["status"]
+                    self.db.commit()
+
+            except Exception as e:
+                logging.error(f"Failed to query order {order.exchange_order_id}: {e}")
+
+        return orders

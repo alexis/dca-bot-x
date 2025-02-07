@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, UTC
 from sqlalchemy import Column, Float, String, Boolean, Integer, JSON, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base, relationship, Session
 from .enums import *
 
 Base = declarative_base()
@@ -55,6 +55,29 @@ class TradingCycle(Base):
     created_at = Column(DateTime, default=datetime.now(UTC))
     updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
+    def profit(self):
+        if self.status == CycleStatusType.COMPLETED:
+            session = Session.object_session(self)
+
+            buy_orders = session.query(Order).filter(
+                Order.cycle_id == self.id,
+                Order.side == SideType.BUY,
+                Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
+            ).all()
+
+            sell_orders = session.query(Order).filter(
+                Order.cycle_id == self.id,
+                Order.side == SideType.SELL,
+                Order.status == OrderStatusType.FILLED
+            ).all()
+
+            total_buy_amount = sum(order.amount for order in buy_orders)
+            total_sell_amount = sum(order.amount for order in sell_orders)
+
+            return round((total_sell_amount - total_buy_amount), 2)
+        else:
+            return 0
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -72,7 +95,7 @@ class Order(Base):
     quantity = Column(Float, nullable=False)
     status = Column(String(20), nullable=False)
     number = Column(Integer, nullable=False)
-    exchange_order_id = Column(String(100), nullable=False)
+    exchange_order_id = Column(Integer, nullable=False)
     exchange_order_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.now(UTC))
     updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))

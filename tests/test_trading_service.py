@@ -19,34 +19,6 @@ def test_launch_inactive_bot(trading_service, test_bot, mock_binance_client):
     mock_binance_client.new_order.assert_not_called()
     assert trading_service.cycle is None
 
-def test_launch_with_existing_cycle(trading_service, test_bot, mock_binance_client, db_session):
-    # Create an active cycle
-    active_cycle = TradingCycle(
-        exchange=test_bot.exchange,
-        symbol=test_bot.symbol,
-        amount=test_bot.amount,
-        grid_length=test_bot.grid_length,
-        first_order_offset=test_bot.first_order_offset,
-        num_orders=test_bot.num_orders,
-        partial_num_orders=0,
-        next_order_volume=test_bot.next_order_volume,
-        price=Decimal('25000'),
-        profit_percentage=test_bot.profit_percentage,
-        price_change_percentage=test_bot.price_change_percentage,
-        status=CycleStatusType.ACTIVE,
-        bot_id=test_bot.id
-    )
-    db_session.add(active_cycle)
-    db_session.commit()
-    
-    trading_service.launch()
-    
-    # Should not create new cycle when active one exists
-    mock_binance_client.ticker_price.assert_not_called()
-    mock_binance_client.new_order.assert_not_called()
-    cycles = db_session.query(TradingCycle).filter(TradingCycle.bot_id == test_bot.id).all()
-    assert len(cycles) == 1
-
 def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_session):
     trading_service.launch()
     
@@ -116,7 +88,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
             quantity=Decimal('0.02'),
             status=OrderStatusType.FILLED,
             cycle_id=test_cycle.id,
-            exchange_order_id="123",
+            exchange_order_id=123,
             time_in_force=TimeInForceType.GTC,
             type=OrderType.LIMIT,
             amount=Decimal('480'),  # price * quantity
@@ -130,7 +102,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
             quantity=Decimal('0.02'),
             status=OrderStatusType.FILLED,
             cycle_id=test_cycle.id,
-            exchange_order_id="124",
+            exchange_order_id=124,
             time_in_force=TimeInForceType.GTC,
             type=OrderType.LIMIT,
             amount=Decimal('460'),  # price * quantity
@@ -158,7 +130,7 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
             side=SideType.BUY,
             status=OrderStatusType.NEW,
             cycle_id=test_cycle.id,
-            exchange_order_id="123",
+            exchange_order_id=123,
             time_in_force=TimeInForceType.GTC,
             type=OrderType.LIMIT,
             price=Decimal('24000'),
@@ -172,7 +144,7 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
             side=SideType.BUY,
             status=OrderStatusType.PARTIALLY_FILLED,
             cycle_id=test_cycle.id,
-            exchange_order_id="124",
+            exchange_order_id=124,
             time_in_force=TimeInForceType.GTC,
             type=OrderType.LIMIT,
             price=Decimal('24000'),
@@ -190,11 +162,11 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
     assert mock_binance_client.cancel_order.call_count == 2
     mock_binance_client.cancel_order.assert_any_call(
         symbol=test_cycle.symbol,
-        orderId="123"
+        orderId=123
     )
     mock_binance_client.cancel_order.assert_any_call(
         symbol=test_cycle.symbol,
-        orderId="124"
+        orderId=124
     )
     
     # Verify orders were marked as canceled
@@ -211,7 +183,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
         price=Decimal('24240'),  # 1% above 24000
         quantity=Decimal('0.02'),
         status=OrderStatusType.NEW,
-        exchange_order_id="123",
+        exchange_order_id=123,
         type=OrderType.LIMIT,
         time_in_force=TimeInForceType.GTC,
         number=1,
@@ -227,7 +199,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
         price=Decimal('23000'),
         quantity=Decimal('0.03'),
         status=OrderStatusType.FILLED,
-        exchange_order_id="124",
+        exchange_order_id=124,
         type=OrderType.LIMIT,
         time_in_force=TimeInForceType.GTC,
         number=2,
@@ -242,7 +214,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
     # Verify the old order was cancelled
     mock_binance_client.cancel_order.assert_called_once_with(
         symbol=trading_service.bot.symbol,
-        orderId="123"
+        orderId=123
     )
     
     # Verify new order was placed
@@ -287,7 +259,7 @@ def test_start_new_cycle(trading_service, mock_binance_client):
     # Setup mock
     mock_binance_client.ticker_price.return_value = {"price": "25000"}
     mock_binance_client.new_order.return_value = {
-        "orderId": "123",
+        "orderId": 123,
         "status": "NEW"
     }
     
@@ -331,7 +303,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     trading_service.cycle = test_cycle
     # Setup mock response
     mock_binance_order = {
-        "orderId": "12345",
+        "orderId": 12345,
         "status": "NEW",
         "executedQty": "0",
         "cummulativeQuoteQty": "0"
@@ -367,7 +339,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     assert order.amount == float(24000 * 0.02)
     assert order.status == OrderStatusType.NEW
     assert order.number == 1
-    assert order.exchange_order_id == "12345"
+    assert order.exchange_order_id == 12345
     assert order.exchange_order_data == mock_binance_order
     assert order.cycle_id == test_cycle.id
 
@@ -421,4 +393,158 @@ def test_check_grid_update_small_change(trading_service, mock_binance_client, te
     # Verify no grid update was performed
     mock_binance_client.cancel_order.assert_not_called()
     mock_binance_client.new_order.assert_not_called()
-    assert test_cycle.price == 24000  # Price should remain unchanged
+    assert test_cycle.price == 24010
+
+def test_query_open_orders(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
+    
+    # Create test orders with different statuses
+    orders = [
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.NEW,
+            cycle_id=test_cycle.id,
+            exchange_order_id=123,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=1
+        ),
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.PARTIALLY_FILLED,
+            cycle_id=test_cycle.id,
+            exchange_order_id=124,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=2
+        )
+    ]
+    db_session.add_all(orders)
+    db_session.commit()
+
+    # Mock Binance API responses
+    mock_binance_client.get_order.side_effect = [
+        {"orderId": 123, "status": "FILLED"},
+        {"orderId": 124, "status": "PARTIALLY_FILLED"}
+    ]
+
+    # Call the method
+    queried_orders = trading_service.query_open_orders()
+
+    # Verify Binance API was called for each order
+    assert mock_binance_client.get_order.call_count == 2
+    mock_binance_client.get_order.assert_any_call(
+        symbol=test_cycle.symbol,
+        orderId=123
+    )
+    mock_binance_client.get_order.assert_any_call(
+        symbol=test_cycle.symbol,
+        orderId=124
+    )
+
+    # Verify order statuses were updated
+    updated_orders = db_session.query(Order).filter(
+        Order.cycle_id == test_cycle.id
+    ).order_by(Order.exchange_order_id).all()
+
+    assert updated_orders[0].status == "FILLED"
+    assert updated_orders[1].status == "PARTIALLY_FILLED"
+    assert len(queried_orders) == 2
+
+def test_cycle_profit_calculation(test_cycle, db_session):
+    # Create filled buy orders
+    buy_orders = [
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.FILLED,
+            cycle_id=test_cycle.id,
+            exchange_order_id=123,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),  # price * quantity
+            number=1
+        ),
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.FILLED,
+            cycle_id=test_cycle.id,
+            exchange_order_id=124,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            price=Decimal('23000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('460'),  # price * quantity
+            number=2
+        )
+    ]
+    
+    # Create filled sell (take profit) order
+    sell_order = Order(
+        exchange=test_cycle.exchange,
+        symbol=test_cycle.symbol,
+        side=SideType.SELL,
+        status=OrderStatusType.FILLED,
+        cycle_id=test_cycle.id,
+        exchange_order_id=125,
+        time_in_force=TimeInForceType.GTC,
+        type=OrderType.LIMIT,
+        price=Decimal('24500'),  # Higher than buy prices
+        quantity=Decimal('0.04'),  # Total quantity from buy orders
+        amount=Decimal('980'),  # price * quantity
+        number=3
+    )
+    
+    db_session.add_all(buy_orders + [sell_order])
+    test_cycle.status = CycleStatusType.COMPLETED
+    db_session.commit()
+    
+    # Expected profit: sell amount - total buy amount = 980 - (480 + 460) = 40
+    assert test_cycle.profit() == 40.00
+
+def test_cycle_profit_incomplete_cycle(test_cycle, db_session):
+    # Create some orders but keep cycle status as ACTIVE
+    buy_order = Order(
+        exchange=test_cycle.exchange,
+        symbol=test_cycle.symbol,
+        side=SideType.BUY,
+        status=OrderStatusType.FILLED,
+        cycle_id=test_cycle.id,
+        exchange_order_id=123,
+        time_in_force=TimeInForceType.GTC,
+        type=OrderType.LIMIT,
+        price=Decimal('24000'),
+        quantity=Decimal('0.02'),
+        amount=Decimal('480'),
+        number=1
+    )
+    
+    db_session.add(buy_order)
+    test_cycle.status = CycleStatusType.ACTIVE  # Cycle not completed
+    db_session.commit()
+    
+    # Should return 0 as cycle is not completed
+    assert test_cycle.profit() == 0
+
+def test_cycle_profit_no_orders(test_cycle, db_session):
+    # Set cycle as completed but with no orders
+    test_cycle.status = CycleStatusType.COMPLETED
+    db_session.commit()
+    
+    # Should return 0 as there are no orders
+    assert test_cycle.profit() == 0

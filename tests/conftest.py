@@ -44,7 +44,7 @@ def mock_binance_client():
     
     # Mock new_order method
     client.new_order.return_value = {
-        "orderId": "123",
+        "orderId": 123,
         "status": "NEW",
         "executedQty": "0",
         "cummulativeQuoteQty": "0"
@@ -52,7 +52,7 @@ def mock_binance_client():
     
     # Mock cancel_order method
     client.cancel_order.return_value = {
-        "orderId": "123",
+        "orderId": 123,
         "status": "CANCELED"
     }
     
