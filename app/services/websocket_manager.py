@@ -60,7 +60,7 @@ class WebsocketManager:
         symbol = msg.get("s")
         
         # Find order in the database
-        order = self.db.query(Order).filter(
+        order = self.trading_service.cycle.orders.filter(
             Order.exchange_order_id == str(order_id)
         ).first()
 

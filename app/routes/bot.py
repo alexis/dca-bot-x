@@ -10,7 +10,7 @@ from ..schemas import (
     OrderResponse
 )
 from ..database import get_db
-from ..enums import BotStatusType
+from ..enums import BotStatusType, CycleStatusType
 import os
 import uuid
 

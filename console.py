@@ -8,6 +8,11 @@ from app.services.trading_service import TradingService
 from app.enums import *
 from decimal import Decimal
 from binance.spot import Spot
+import logging
+
+# Configure SQLAlchemy logging
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 # Create a database session
 db = next(get_db())

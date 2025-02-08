@@ -203,17 +203,11 @@ class TradingService:
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).all()
 
-        for order in orders:
-            try:
-                self.client.cancel_order(
-                    symbol=order.symbol,
-                    orderId=order.exchange_order_id
-                )
-            except Exception as e:
-                logging.error(f"Failed to cancel order {order.exchange_order_id}: {e}")
+        self.client.cancel_open_orders(self.bot.symbol)
 
+        for order in orders:
             order.status = OrderStatusType.CANCELED
-            self.db.commit()
+        self.db.commit()
 
     def update_take_profit_order(self):
         """Update or place take profit order after a buy order is filled"""

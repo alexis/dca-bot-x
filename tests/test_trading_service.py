@@ -157,17 +157,8 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
     
     trading_service.cancel_cycle_orders()
     
-    # Verify cancel_order was called for each order
-    assert mock_binance_client.cancel_order.call_count == 2
-    mock_binance_client.cancel_order.assert_any_call(
-        symbol=test_cycle.symbol,
-        orderId=123
-    )
-    mock_binance_client.cancel_order.assert_any_call(
-        symbol=test_cycle.symbol,
-        orderId=124
-    )
-    
+    # Verify cancel_order was called
+    assert mock_binance_client.cancel_open_orders.call_count == 1
     # Verify orders were marked as canceled
     assert all(order.status == OrderStatusType.CANCELED for order in orders)
 
