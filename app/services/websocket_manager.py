@@ -24,6 +24,14 @@ class WebsocketManager:
     def _stream_url(self):
         return "wss://stream.testnet.binance.vision" if os.getenv("BINANCE_TESTNET") else "wss://stream.binance.com"
 
+    async def start(self):
+        """Start WebSocket connection and subscribe to relevant streams"""
+
+        self.ws_client.user_data(listen_key=self.listen_key)
+
+        for symbol in self.active_symbols:
+            self.ws_client.ticker(symbol=symbol)
+
     def message_handler(self, _, msg):
         json_msg = json.loads(msg)
         
@@ -35,14 +43,6 @@ class WebsocketManager:
                 self._handle_price_update(json_msg)
             case _:
                 if os.getenv("ENV") == "development": logging.info(msg)
-
-    async def start(self):
-        """Start WebSocket connection and subscribe to relevant streams"""
-
-        self.ws_client.user_data(listen_key=self.listen_key)
-
-        for symbol in self.active_symbols:
-            self.ws_client.ticker(symbol=symbol)
 
     def _handle_price_update(self, msg: dict):
         """Handle price updates and check if grid needs to be updated"""
