@@ -29,7 +29,6 @@ class TradingService:
 
         if self.cycle:
             self.query_open_orders()
-            self.check_cycle_completion()
 
             if self.cycle.orders.count() == 0:
                 self.place_grid_orders()
@@ -161,12 +160,21 @@ class TradingService:
         self.cycle.quantity = sum(order.quantity for order in self.cycle.orders.all())
         self.db.commit()
 
-    def place_take_profit_order(self, filled_orders: List[Order]) -> Order:
+    def place_take_profit_order(self) -> Order:
+        filled_buy_orders = self.cycle.orders.filter(
+            Order.side == SideType.BUY,
+            Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
+        ).all()
+
         """Place or update take profit order"""
         # Calculate average buy price and total quantity
-        total_quantity = sum(order.quantity_filled for order in filled_orders)
-        total_cost = sum(order.price * order.quantity_filled for order in filled_orders)
+        total_quantity = sum(order.quantity_filled for order in filled_buy_orders)
+        total_cost = sum(order.price * order.quantity_filled for order in filled_buy_orders)
         avg_price = total_cost / total_quantity
+
+        sell_quantity_filled = sum(order.quantity_filled for order in self.cycle.orders.filter(
+            Order.side == SideType.SELL
+        ).all())
 
         # Calculate take profit price
         take_profit_price = avg_price * (1 + self.bot.profit_percentage / 100)
@@ -174,8 +182,8 @@ class TradingService:
         return self.create_binance_order(
             side="SELL",
             price=Decimal(str(take_profit_price)),
-            quantity=Decimal(str(total_quantity)),
-            number=len(filled_orders) + 1
+            quantity=Decimal(str(total_quantity - sell_quantity_filled)),
+            number=len(filled_buy_orders) + 1
         )
 
     def start_new_cycle(self) -> TradingCycle:
@@ -217,7 +225,7 @@ class TradingService:
     def cancel_cycle_orders(self):
         """Cancel all active orders in a cycle"""
         orders = self.cycle.orders.filter(
-            Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
+            Order.status == OrderStatusType.NEW
         ).all()
 
         for order in orders:
@@ -234,12 +242,7 @@ class TradingService:
 
     def update_take_profit_order(self, tp_order: Order):
         """Update or place take profit order after a buy order is filled"""
-        filled_orders = self.cycle.orders.filter(
-            Order.side == SideType.BUY,
-            Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
-        ).all()
-        
-        if tp_order.status == OrderStatusType.NEW:
+        if tp_order.status in (OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED):
             try:
                 self.client.cancel_order(
                     symbol=tp_order.symbol,
@@ -252,7 +255,7 @@ class TradingService:
             self.db.commit()
         
         # Place new take profit order
-        new_tp = self.place_take_profit_order(filled_orders)
+        new_tp = self.place_take_profit_order()
         self.db.add(new_tp)
         self.db.commit()
 
@@ -260,9 +263,6 @@ class TradingService:
         """Check if cycle is completed and can be closed"""
 
         if tp_order.quantity_filled == self.cycle.quantity:
-            # Cancel remaining buy orders
-            self.cancel_cycle_orders()
-            
             # Mark cycle as completed
             self.cycle.status = CycleStatusType.COMPLETED
             self.db.commit()

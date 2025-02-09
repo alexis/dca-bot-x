@@ -115,7 +115,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
     db_session.add_all(filled_orders)
     db_session.commit()
     
-    tp_order = trading_service.place_take_profit_order(filled_orders)
+    tp_order = trading_service.place_take_profit_order()
     
     assert isinstance(tp_order, Order)
     assert tp_order.side == SideType.SELL
@@ -146,7 +146,7 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
             exchange=test_cycle.exchange,
             symbol=test_cycle.symbol,
             side=SideType.BUY,
-            status=OrderStatusType.PARTIALLY_FILLED,
+            status=OrderStatusType.NEW,
             cycle_id=test_cycle.id,
             exchange_order_id=124,
             time_in_force=TimeInForceType.GTC,
