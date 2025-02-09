@@ -50,6 +50,7 @@ class TradingCycle(Base):
     profit_percentage = Column(Float, nullable=False)
     status = Column(String(20), nullable=False)
     price_change_percentage = Column(Float, nullable=False)
+    quantity = Column(Float, server_default='0')
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

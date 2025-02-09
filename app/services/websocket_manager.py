@@ -71,9 +71,7 @@ class WebsocketManager:
             order.exchange_order_data = msg
             self.db.commit()
             
-            # actions for filled orders
-            if status == "FILLED":
-                if order.side == SideType.BUY:
-                    self.trading_service.update_take_profit_order()
-                elif order.side == SideType.SELL:
-                    self.trading_service.check_cycle_completion()
+            if order.side == SideType.BUY:
+                self.trading_service.update_take_profit_order(order)
+            elif order.side == SideType.SELL and status == "FILLED":
+                self.trading_service.check_cycle_completion(order)

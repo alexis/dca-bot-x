@@ -68,12 +68,13 @@ def test_calculate_grid_quantities(trading_service):
 
 def test_place_grid_orders(trading_service, mock_binance_client, test_cycle):
     trading_service.cycle = test_cycle
-    trading_service.place_grid_orders()
+    orders = trading_service.place_grid_orders()
     
     assert test_cycle.orders.count() == trading_service.bot.num_orders
     assert all(isinstance(order, Order) for order in test_cycle.orders)
     assert all(order.side == SideType.BUY for order in test_cycle.orders)
     assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
+    assert test_cycle.quantity == sum(order.quantity for order in test_cycle.orders)
 
 def test_place_take_profit_order(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
@@ -206,7 +207,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
     db_session.add_all([existing_tp_order, new_filled_order])
     db_session.commit()
     
-    trading_service.update_take_profit_order()
+    trading_service.update_take_profit_order(existing_tp_order)
 
     # Verify the old order was cancelled
     mock_binance_client.cancel_order.assert_called_once_with(
@@ -227,6 +228,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
 
 def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
+    test_cycle.quantity = Decimal('0.02')
 
     # Create new filled buy order
     new_filled_order = Order(
@@ -267,7 +269,7 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle
     db_session.add(tp_order)
     db_session.commit()
     
-    trading_service.check_cycle_completion()
+    trading_service.check_cycle_completion(tp_order)
     
     assert test_cycle.status == CycleStatusType.COMPLETED
     # Should try to start a new cycle since bot is active

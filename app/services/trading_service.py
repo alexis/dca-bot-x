@@ -158,6 +158,9 @@ class TradingService:
         self.db.add_all(orders)
         self.db.commit()
 
+        self.cycle.quantity = sum(order.quantity for order in self.cycle.orders.all())
+        self.db.commit()
+
     def place_take_profit_order(self, filled_orders: List[Order]) -> Order:
         """Place or update take profit order"""
         # Calculate average buy price and total quantity
@@ -229,29 +232,23 @@ class TradingService:
 
         self.db.commit()
 
-    def update_take_profit_order(self):
+    def update_take_profit_order(self, tp_order: Order):
         """Update or place take profit order after a buy order is filled"""
         filled_orders = self.cycle.orders.filter(
             Order.side == SideType.BUY,
             Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
         ).all()
         
-        # Cancel existing take profit order if exists
-        existing_tp = self.cycle.orders.filter(
-            Order.side == SideType.SELL,
-            Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
-        ).first()
-        
-        if existing_tp and existing_tp.status == OrderStatusType.NEW:
+        if tp_order.status == OrderStatusType.NEW:
             try:
                 self.client.cancel_order(
-                    symbol=existing_tp.symbol,
-                    orderId=existing_tp.exchange_order_id
+                    symbol=tp_order.symbol,
+                    orderId=tp_order.exchange_order_id
                 )
             except Exception as e:
                 logging.error(f"Failed to cancel take profit order: {e}")
 
-            existing_tp.status = OrderStatusType.CANCELED
+            tp_order.status = OrderStatusType.CANCELED
             self.db.commit()
         
         # Place new take profit order
@@ -259,34 +256,22 @@ class TradingService:
         self.db.add(new_tp)
         self.db.commit()
 
-    def check_cycle_completion(self):
+    def check_cycle_completion(self, tp_order: Order):
         """Check if cycle is completed and can be closed"""
-        # Check if take profit order is filled
-        tp_order = self.cycle.orders.filter(
-            Order.side == SideType.SELL,
-            Order.status == OrderStatusType.FILLED
-        ).first()
 
-        filled_buy_orders = self.cycle.orders.filter(
-            Order.side == SideType.BUY,
-            Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
-        ).all()
-        quantity_filled = sum(order.quantity_filled for order in filled_buy_orders)
-
-        if tp_order:
-            if quantity_filled == tp_order.quantity_filled:
-                # Cancel remaining buy orders
-                self.cancel_cycle_orders()
-                
-                # Mark cycle as completed
-                self.cycle.status = CycleStatusType.COMPLETED
-                self.db.commit()
-                
-                # Start new cycle if bot is still active
-                if self.bot.is_active:
-                    self.start_new_cycle()
-            else:
-                raise ValueError(f"Cycle is not completed, {quantity_filled} != {tp_order.quantity_filled}")
+        if tp_order.quantity_filled == self.cycle.quantity:
+            # Cancel remaining buy orders
+            self.cancel_cycle_orders()
+            
+            # Mark cycle as completed
+            self.cycle.status = CycleStatusType.COMPLETED
+            self.db.commit()
+            
+            # Start new cycle if bot is still active
+            if self.bot.is_active:
+                self.start_new_cycle()
+        else:
+            raise ValueError(f"Cycle is not completed, {tp_order.quantity_filled} != {self.cycle.quantity}")
 
     def check_grid_update(self, current_price: float):
         """Check if grid needs to be updated based on price movement"""
