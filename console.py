@@ -11,8 +11,8 @@ from binance.spot import Spot
 import logging
 
 # Configure SQLAlchemy logging
-logging.basicConfig()
-logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+# logging.basicConfig()
+# logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 # Create a database session
 db = next(get_db())

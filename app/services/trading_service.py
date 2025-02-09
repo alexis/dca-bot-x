@@ -161,8 +161,8 @@ class TradingService:
     def place_take_profit_order(self, filled_orders: List[Order]) -> Order:
         """Place or update take profit order"""
         # Calculate average buy price and total quantity
-        total_quantity = sum(order.quantity for order in filled_orders)
-        total_cost = sum(order.price * order.quantity for order in filled_orders)
+        total_quantity = sum(order.quantity_filled for order in filled_orders)
+        total_cost = sum(order.price * order.quantity_filled for order in filled_orders)
         avg_price = total_cost / total_quantity
 
         # Calculate take profit price
@@ -233,7 +233,7 @@ class TradingService:
         """Update or place take profit order after a buy order is filled"""
         filled_orders = self.cycle.orders.filter(
             Order.side == SideType.BUY,
-            Order.status == OrderStatusType.FILLED
+            Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
         ).all()
         
         # Cancel existing take profit order if exists
@@ -242,7 +242,7 @@ class TradingService:
             Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
         ).first()
         
-        if existing_tp:
+        if existing_tp and existing_tp.status == OrderStatusType.NEW:
             try:
                 self.client.cancel_order(
                     symbol=existing_tp.symbol,
@@ -266,18 +266,27 @@ class TradingService:
             Order.side == SideType.SELL,
             Order.status == OrderStatusType.FILLED
         ).first()
-        
+
+        filled_buy_orders = self.cycle.orders.filter(
+            Order.side == SideType.BUY,
+            Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
+        ).all()
+        quantity_filled = sum(order.quantity_filled for order in filled_buy_orders)
+
         if tp_order:
-            # Cancel remaining buy orders
-            self.cancel_cycle_orders()
-            
-            # Mark cycle as completed
-            self.cycle.status = CycleStatusType.COMPLETED
-            self.db.commit()
-            
-            # Start new cycle if bot is still active
-            if self.bot.is_active:
-                self.start_new_cycle()
+            if quantity_filled == tp_order.quantity_filled:
+                # Cancel remaining buy orders
+                self.cancel_cycle_orders()
+                
+                # Mark cycle as completed
+                self.cycle.status = CycleStatusType.COMPLETED
+                self.db.commit()
+                
+                # Start new cycle if bot is still active
+                if self.bot.is_active:
+                    self.start_new_cycle()
+            else:
+                raise ValueError(f"Cycle is not completed, {quantity_filled} != {tp_order.quantity_filled}")
 
     def check_grid_update(self, current_price: float):
         """Check if grid needs to be updated based on price movement"""

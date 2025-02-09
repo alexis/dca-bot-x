@@ -86,6 +86,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
             side=SideType.BUY,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
             status=OrderStatusType.FILLED,
             cycle_id=test_cycle.id,
             exchange_order_id=123,
@@ -100,6 +101,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
             side=SideType.BUY,
             price=Decimal('23000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
             status=OrderStatusType.FILLED,
             cycle_id=test_cycle.id,
             exchange_order_id=124,
@@ -135,6 +137,7 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
             type=OrderType.LIMIT,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0'),
             amount=Decimal('480'),
             number=1
         ),
@@ -149,6 +152,7 @@ def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, d
             type=OrderType.LIMIT,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.01'),
             amount=Decimal('480'),
             number=2
         )
@@ -173,6 +177,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
         side=SideType.SELL,
         price=Decimal('24240'),  # 1% above 24000
         quantity=Decimal('0.02'),
+        quantity_filled=Decimal('0'),
         status=OrderStatusType.NEW,
         exchange_order_id=123,
         type=OrderType.LIMIT,
@@ -189,6 +194,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
         side=SideType.BUY,
         price=Decimal('23000'),
         quantity=Decimal('0.03'),
+        quantity_filled=Decimal('0.03'),
         status=OrderStatusType.FILLED,
         exchange_order_id=124,
         type=OrderType.LIMIT,
@@ -221,6 +227,27 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
 
 def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
+
+    # Create new filled buy order
+    new_filled_order = Order(
+        cycle_id=test_cycle.id,
+        exchange=trading_service.bot.exchange,
+        symbol=trading_service.bot.symbol,
+        side=SideType.BUY,
+        price=Decimal('23000'),
+        quantity=Decimal('0.02'),
+        quantity_filled=Decimal('0.02'),
+        status=OrderStatusType.FILLED,
+        exchange_order_id=124,
+        type=OrderType.LIMIT,
+        time_in_force=TimeInForceType.GTC,
+        number=2,
+        amount=Decimal('690')  # price * quantity
+    )
+    
+    db_session.add(new_filled_order)
+    db_session.commit()
+
     # Add a filled sell order (take profit)
     tp_order = Order(
         exchange=test_cycle.exchange,
@@ -233,6 +260,7 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle
         type=OrderType.LIMIT,
         price=Decimal('24000'),
         quantity=Decimal('0.02'),
+        quantity_filled=Decimal('0.02'),
         amount=Decimal('480'),
         number=1
     )
@@ -362,6 +390,7 @@ def test_check_grid_update(mock_cancel_orders, trading_service, mock_binance_cli
             cycle_id=test_cycle.id,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0'),
             amount=Decimal('480'),
             number=1,
             time_in_force=TimeInForceType.GTC,
@@ -377,6 +406,7 @@ def test_check_grid_update(mock_cancel_orders, trading_service, mock_binance_cli
             cycle_id=test_cycle.id,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0'),
             amount=Decimal('480'),
             number=2,
             time_in_force=TimeInForceType.GTC,
@@ -413,6 +443,7 @@ def test_check_grid_update_with_filled_order(mock_cancel_orders, trading_service
             cycle_id=test_cycle.id,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0'),
             amount=Decimal('480'),
             number=1,
             time_in_force=TimeInForceType.GTC,
@@ -428,6 +459,7 @@ def test_check_grid_update_with_filled_order(mock_cancel_orders, trading_service
             cycle_id=test_cycle.id,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
             amount=Decimal('480'),
             number=2,
             time_in_force=TimeInForceType.GTC,
@@ -474,6 +506,7 @@ def test_check_grid_update_small_change(trading_service, mock_binance_client, te
             cycle_id=test_cycle.id,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0'),
             amount=Decimal('480'),
             number=1,
             time_in_force=TimeInForceType.GTC,
@@ -489,6 +522,7 @@ def test_check_grid_update_small_change(trading_service, mock_binance_client, te
             cycle_id=test_cycle.id,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0'),
             amount=Decimal('480'),
             number=2,
             time_in_force=TimeInForceType.GTC,
@@ -589,6 +623,7 @@ def test_cycle_profit_calculation(test_cycle, db_session):
             type=OrderType.LIMIT,
             price=Decimal('24000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
             amount=Decimal('480'),  # price * quantity
             number=1
         ),
@@ -603,6 +638,7 @@ def test_cycle_profit_calculation(test_cycle, db_session):
             type=OrderType.LIMIT,
             price=Decimal('23000'),
             quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
             amount=Decimal('460'),  # price * quantity
             number=2
         )
@@ -620,6 +656,7 @@ def test_cycle_profit_calculation(test_cycle, db_session):
         type=OrderType.LIMIT,
         price=Decimal('24500'),  # Higher than buy prices
         quantity=Decimal('0.04'),  # Total quantity from buy orders
+        quantity_filled=Decimal('0.04'),
         amount=Decimal('980'),  # price * quantity
         number=3
     )
@@ -644,6 +681,7 @@ def test_cycle_profit_incomplete_cycle(test_cycle, db_session):
         type=OrderType.LIMIT,
         price=Decimal('24000'),
         quantity=Decimal('0.02'),
+        quantity_filled=Decimal('0.02'),
         amount=Decimal('480'),
         number=1
     )

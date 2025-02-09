@@ -64,11 +64,11 @@ class TradingCycle(Base):
 
             sell_orders = self.orders.filter(
                 Order.side == SideType.SELL,
-                Order.status == OrderStatusType.FILLED
+                Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
             ).all()
 
-            total_buy_amount = sum(order.amount for order in buy_orders)
-            total_sell_amount = sum(order.amount for order in sell_orders)
+            total_buy_amount = sum(order.quantity_filled * order.price for order in buy_orders)
+            total_sell_amount = sum(order.quantity_filled * order.price for order in sell_orders)
 
             return round((total_sell_amount - total_buy_amount), 2)
         else:
@@ -89,6 +89,7 @@ class Order(Base):
     price = Column(Float, nullable=False)
     amount = Column(Float, nullable=False)
     quantity = Column(Float, nullable=False)
+    quantity_filled = Column(Float, server_default='0')
     status = Column(String(20), nullable=False)
     number = Column(Integer, nullable=False)
     exchange_order_id = Column(Integer, nullable=False)

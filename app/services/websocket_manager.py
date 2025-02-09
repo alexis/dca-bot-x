@@ -57,26 +57,23 @@ class WebsocketManager:
 
         order_id = msg.get("i")
         status = msg.get("X")
-        symbol = msg.get("s")
+        quantity_filled = float(msg.get("z"))
         
         # Find order in the database
         order = self.trading_service.cycle.orders.filter(
             Order.exchange_order_id == str(order_id)
         ).first()
 
-        if order and status == "PARTIALLY_FILLED":
-            # Update order status
-            order.status = OrderStatusType.PARTIALLY_FILLED
-            order.exchange_order_data = msg
-            self.db.commit()
-
-        if order and status == "FILLED":
-            # Update order status
-            order.status = OrderStatusType.FILLED
+        if order and status in ("PARTIALLY_FILLED", "FILLED"):
+            # Update order
+            order.status = status
+            order.quantity_filled = quantity_filled
             order.exchange_order_data = msg
             self.db.commit()
             
-            if order.side == SideType.BUY:
-                self.trading_service.update_take_profit_order()
-            elif order.side == SideType.SELL:
-                self.trading_service.check_cycle_completion()
+            # actions for filled orders
+            if status == "FILLED":
+                if order.side == SideType.BUY:
+                    self.trading_service.update_take_profit_order()
+                elif order.side == SideType.SELL:
+                    self.trading_service.check_cycle_completion()

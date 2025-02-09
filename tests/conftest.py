@@ -131,6 +131,7 @@ def test_order(db_session, test_cycle):
         time_in_force=TimeInForceType.GTC,
         price=Decimal('100000'),
         quantity=Decimal('0.02'),
+        quantity_filled=Decimal('0'),
         amount=Decimal('480'),
         status=OrderStatusType.NEW,
         number=1,
