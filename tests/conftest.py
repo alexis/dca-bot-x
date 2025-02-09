@@ -40,7 +40,7 @@ def db_session(db_engine):
 def mock_binance_client():
     client = Mock()
     # Mock ticker_price method
-    client.ticker_price.return_value = {"price": "25000"}
+    client.ticker_price.return_value = {"price": "100000"}
     
     # Mock new_order method
     client.new_order.return_value = {
@@ -114,7 +114,7 @@ def test_cycle(db_session, test_bot):
         next_order_volume=test_bot.next_order_volume,
         profit_percentage=test_bot.profit_percentage,
         price_change_percentage=test_bot.price_change_percentage,
-        price=Decimal('24000')
+        price=Decimal('100000')
     )
     db_session.add(cycle)
     db_session.flush()
@@ -129,12 +129,13 @@ def test_order(db_session, test_cycle):
         side=SideType.BUY,
         type=OrderType.LIMIT,
         time_in_force=TimeInForceType.GTC,
-        price=Decimal('24000'),
+        price=Decimal('100000'),
         quantity=Decimal('0.02'),
         amount=Decimal('480'),
         status=OrderStatusType.NEW,
         number=1,
         exchange_order_id="123",
+        exchange_order_data={},
         cycle_id=test_cycle.id
     )
     db_session.add(order)

@@ -6,6 +6,8 @@ from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, Cycle
 from sqlalchemy.orm import Session
 import logging
 import os
+import time
+
 
 class TradingService:
     def __init__(self, db: Session, bot: Bot):
@@ -129,7 +131,17 @@ class TradingService:
 
     def place_grid_orders(self) -> List[Order]:
         """Place initial grid orders"""
-        market_price = Decimal(self.client.ticker_price(symbol=self.bot.symbol)["price"])
+
+        # this is a hack to ensure the market price is above 60000
+        # to avoid failures "Filter failure: PERCENT_PRICE_BY_SIDE"
+        # happening in testnet because of high volatility in testnet
+        while True:
+            market_price = Decimal(self.client.ticker_price(symbol=self.bot.symbol)["price"])
+
+            if market_price > 60000:
+                break
+            time.sleep(5)
+
         prices = self.calculate_grid_prices(market_price)
         quantities = self.calculate_grid_quantities(prices)
         
@@ -272,21 +284,18 @@ class TradingService:
         if not self.cycle:
             return
 
-        price_change = (current_price - self.cycle.price) / self.cycle.price * 100
+        price_increase = (current_price - self.cycle.price) / self.cycle.price * 100
 
         # Update cycle price
         self.cycle.price = current_price
         self.db.commit()
 
-        if price_change >= self.bot.price_change_percentage:
+        if price_increase >= self.bot.price_change_percentage \
+            and all(order.status == OrderStatusType.NEW for order in self.cycle.orders.all()):
+
             # Cancel existing orders and create new grid
             self.cancel_cycle_orders()
-
-            # Place new grid orders
-            try:
-                self.place_grid_orders()
-            except Exception as e:
-                logging.error(f"Failed to update grid: {e}")
+            self.place_grid_orders()
 
     def query_open_orders(self):
         """Query open orders for the cycle"""

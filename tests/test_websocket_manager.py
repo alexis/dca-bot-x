@@ -77,7 +77,7 @@ async def test_message_handler_execution_report_sell_order_filled(websocket_mana
     
     # Update test_order to be a sell order
     test_order.side = SideType.SELL
-    test_order.price = Decimal('25000')
+    test_order.price = Decimal('100000')
     test_order.amount = Decimal('500')
     test_order.quantity = Decimal('0.02')
     db_session.commit()
@@ -91,7 +91,7 @@ async def test_message_handler_execution_report_sell_order_filled(websocket_mana
         "S": "SELL",  # side
         "o": "LIMIT",  # orderType
         "q": "0.02",  # quantity
-        "p": "25000",  # price
+        "p": "100000",  # price
         "x": "TRADE",  # execution type
         "l": "0.02"  # executed quantity
     }

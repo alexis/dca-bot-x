@@ -5,6 +5,7 @@ from app.enums import OrderStatusType, SideType, TimeInForceType, OrderType, Cyc
 from uuid import uuid4
 from unittest.mock import patch
 from app.services.trading_service import TradingService
+
 def test_launch(trading_service, test_bot):
     trading_service.launch()
 
@@ -42,7 +43,7 @@ def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_ses
     assert all(order.status == OrderStatusType.NEW for order in orders)
 
 def test_calculate_grid_prices(trading_service):
-    market_price = Decimal('25000')
+    market_price = Decimal('125000')
     prices = trading_service.calculate_grid_prices(market_price)
     
     assert len(prices) == trading_service.bot.num_orders
@@ -54,7 +55,7 @@ def test_calculate_grid_prices(trading_service):
     assert all(abs(intervals[0] - interval) < Decimal('0.0001') for interval in intervals)
 
 def test_calculate_grid_quantities(trading_service):
-    prices = [Decimal('25000'), Decimal('24750'), Decimal('24500'), Decimal('24250'), Decimal('24000')]
+    prices = [Decimal('125000'), Decimal('124750'), Decimal('124500'), Decimal('124250'), Decimal('124000')]
     quantities = trading_service.calculate_grid_quantities(prices)
     
     assert len(quantities) == trading_service.bot.num_orders
@@ -246,7 +247,7 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle
 
 def test_start_new_cycle(trading_service, mock_binance_client):
     # Setup mock
-    mock_binance_client.ticker_price.return_value = {"price": "25000"}
+    mock_binance_client.ticker_price.return_value = {"price": "100000"}
     mock_binance_client.new_order.return_value = {
         "orderId": 123,
         "status": "NEW"
@@ -274,7 +275,7 @@ def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client,
         first_order_offset=trading_service.bot.first_order_offset,
         num_orders=trading_service.bot.num_orders,
         next_order_volume=trading_service.bot.next_order_volume,
-        price=Decimal('25000'),
+        price=Decimal('125000'),
         profit_percentage=trading_service.bot.profit_percentage,
         price_change_percentage=trading_service.bot.price_change_percentage,
         status=CycleStatusType.ACTIVE,
@@ -348,40 +349,167 @@ def test_create_binance_order_error(trading_service, mock_binance_client, test_c
     assert "Failed to create order" in str(exc_info.value)
 
 @patch.object(TradingService, 'cancel_cycle_orders')
-def test_check_grid_update(mock_cancel_cycle_orders, trading_service, mock_binance_client, test_cycle):
+def test_check_grid_update(mock_cancel_orders, trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
-    current_price = 25200
+
+    # Create test orders with NEW status
+    orders = [
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.NEW,
+            cycle_id=test_cycle.id,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=1,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            exchange_order_id=123,
+            exchange_order_data={}
+        ),
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.NEW,
+            cycle_id=test_cycle.id,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=2,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            exchange_order_id=124,
+            exchange_order_data={}
+        )
+    ]
+    db_session.add_all(orders)
+    db_session.commit()
+    
+    # Calculate price that would trigger update (>1% change)
+    current_price = 101100  # 1.1% increase
 
     trading_service.check_grid_update(current_price)
 
-    # Verify grid was updated
+    # Verify cycle price was updated
     assert test_cycle.price == current_price
+
+    # Verify grid was updated
+    mock_cancel_orders.assert_called_once()
     assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
-    
-    # Verify cancel_cycle_orders was called for existing orders
-    mock_cancel_cycle_orders.assert_called()
 
 @patch.object(TradingService, 'cancel_cycle_orders')
-def test_check_grid_update_without_cycle(mock_cancel_cycle_orders, trading_service, mock_binance_client):
+def test_check_grid_update_with_filled_order(mock_cancel_orders, trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
+
+    orders = [
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.NEW,
+            cycle_id=test_cycle.id,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=1,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            exchange_order_id=123,
+            exchange_order_data={}
+        ),
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.FILLED,
+            cycle_id=test_cycle.id,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=2,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            exchange_order_id=124,
+            exchange_order_data={}
+        )
+    ]
+    db_session.add_all(orders)
+    db_session.commit()
+
+    # Calculate price that would trigger update (>1% change)
+    current_price = 101100  # 1.1% increase
+
+    trading_service.check_grid_update(current_price)
+
+    # Verify cycle price was updated
+    assert test_cycle.price == current_price
+
+    # Verify no grid update was performed since we have a filled order
+    mock_cancel_orders.assert_not_called()
+    mock_binance_client.new_order.assert_not_called()
+
+@patch.object(TradingService, 'cancel_cycle_orders')
+def test_check_grid_update_without_cycle(trading_service, mock_binance_client):
     trading_service.cycle = None
-    current_price = 25200
+    current_price = 101000
 
     trading_service.check_grid_update(current_price)
 
     # Verify no actions were taken
-    mock_cancel_cycle_orders.assert_not_called()
+    mock_binance_client.cancel_order.assert_not_called()
     mock_binance_client.new_order.assert_not_called()
 
-def test_check_grid_update_small_change(trading_service, mock_binance_client, test_cycle):
+def test_check_grid_update_small_change(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
-    current_price = 24010  # Less than 0.5% change from 24000
+
+    orders = [
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.NEW,
+            cycle_id=test_cycle.id,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=1,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            exchange_order_id=123,
+            exchange_order_data={}
+        ),
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.NEW,
+            cycle_id=test_cycle.id,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            amount=Decimal('480'),
+            number=2,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            exchange_order_id=124,
+            exchange_order_data={}
+        )
+    ]
+    db_session.add_all(orders)
+    db_session.commit()
+    
+    current_price = 100001
 
     trading_service.check_grid_update(current_price)
+
+    assert test_cycle.price == current_price
 
     # Verify no grid update was performed
     mock_binance_client.cancel_order.assert_not_called()
     mock_binance_client.new_order.assert_not_called()
-    assert test_cycle.price == 24010
+
 
 def test_query_open_orders(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
