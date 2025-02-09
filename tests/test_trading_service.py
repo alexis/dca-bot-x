@@ -207,7 +207,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
     db_session.add_all([existing_tp_order, new_filled_order])
     db_session.commit()
     
-    trading_service.update_take_profit_order(existing_tp_order)
+    trading_service.update_take_profit_order()
 
     # Verify the old order was cancelled
     mock_binance_client.cancel_order.assert_called_once_with(

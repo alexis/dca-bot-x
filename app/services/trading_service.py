@@ -8,7 +8,6 @@ import logging
 import os
 import time
 
-
 class TradingService:
     def __init__(self, db: Session, bot: Bot):
         self.client = Spot(
@@ -240,9 +239,14 @@ class TradingService:
 
         self.db.commit()
 
-    def update_take_profit_order(self, tp_order: Order):
+    def update_take_profit_order(self):
         """Update or place take profit order after a buy order is filled"""
-        if tp_order.status in (OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED):
+        tp_order = self.cycle.orders.filter(
+                    Order.side == SideType.SELL,
+                    Order.status.in_([OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED])
+        ).first()
+
+        if tp_order and tp_order.status in (OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED):
             try:
                 self.client.cancel_order(
                     symbol=tp_order.symbol,
