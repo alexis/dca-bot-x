@@ -90,7 +90,6 @@ def test_bot(db_session):
         price_change_percentage=Decimal('1'),
         status=BotStatusType.ACTIVE,
         is_active=True,
-        partial_num_orders=0,
         upper_price_limit=Decimal('30000'),
         api_key="test_api_key",
         api_secret="test_api_secret"
@@ -115,7 +114,6 @@ def test_cycle(db_session, test_bot):
         next_order_volume=test_bot.next_order_volume,
         profit_percentage=test_bot.profit_percentage,
         price_change_percentage=test_bot.price_change_percentage,
-        partial_num_orders=0,
         price=Decimal('24000')
     )
     db_session.add(cycle)

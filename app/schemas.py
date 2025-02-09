@@ -11,7 +11,6 @@ class BotBase(BaseModel):
     grid_length: float = Field(..., gt=0)
     first_order_offset: float
     num_orders: int = Field(..., gt=0)
-    partial_num_orders: int = Field(..., ge=0)
     next_order_volume: float
     profit_percentage: float
     price_change_percentage: float
@@ -39,7 +38,6 @@ class TradingCycleBase(BaseModel):
     grid_length: float = Field(..., gt=0)
     first_order_offset: float
     num_orders: int = Field(..., gt=0)
-    partial_num_orders: int = Field(..., ge=0)
     next_order_volume: float
     price: float = Field(..., gt=0)
     profit_percentage: float

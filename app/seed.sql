@@ -7,7 +7,6 @@ INSERT INTO bots (
     grid_length,
     first_order_offset,
     num_orders,
-    partial_num_orders,
     next_order_volume,
     profit_percentage,
     price_change_percentage,
@@ -27,8 +26,7 @@ INSERT INTO bots (
     10.0,                  -- grid_length
     1,                   -- first_order_offset
     5,                     -- num_orders
-    0,                     -- partial_num_orders
-    50.0,                   -- next_order_volume
+    20.0,                   -- next_order_volume
     1.0,                   -- profit_percentage
     1.0,                   -- price_change_percentage
     30000.0,              -- upper_price_limit

@@ -1,9 +1,9 @@
 import uuid
-from datetime import datetime, UTC
 from sqlalchemy import Column, Float, String, Boolean, Integer, JSON, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship, Session
 from .enums import *
+from sqlalchemy.sql import func
 
 Base = declarative_base()
 
@@ -22,15 +22,14 @@ class Bot(Base):
     grid_length = Column(Float, nullable=False)
     first_order_offset = Column(Float, nullable=False)
     num_orders = Column(Integer, nullable=False)
-    partial_num_orders = Column(Integer, nullable=False)
     next_order_volume = Column(Float, nullable=False)
     profit_percentage = Column(Float, nullable=False)
     price_change_percentage = Column(Float, nullable=False)
     upper_price_limit = Column(Float, nullable=False)
     is_active = Column(Boolean, default=True)
     status = Column(String(20), nullable=False)
-    created_at = Column(DateTime, default=datetime.now(UTC))
-    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 class TradingCycle(Base):
     __tablename__ = "trading_cycles"
@@ -46,14 +45,13 @@ class TradingCycle(Base):
     grid_length = Column(Float, nullable=False)
     first_order_offset = Column(Float, nullable=False)
     num_orders = Column(Integer, nullable=False)
-    partial_num_orders = Column(Integer, nullable=False)
     next_order_volume = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
     profit_percentage = Column(Float, nullable=False)
     status = Column(String(20), nullable=False)
     price_change_percentage = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.now(UTC))
-    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     def profit(self):
         if self.status == CycleStatusType.COMPLETED:
@@ -95,5 +93,5 @@ class Order(Base):
     number = Column(Integer, nullable=False)
     exchange_order_id = Column(Integer, nullable=False)
     exchange_order_data = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(UTC))
-    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

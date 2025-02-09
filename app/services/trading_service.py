@@ -28,6 +28,9 @@ class TradingService:
         if self.cycle:
             self.query_open_orders()
             self.check_cycle_completion()
+
+            if self.cycle.orders.count() == 0:
+                self.place_grid_orders()
         else:
             self.start_new_cycle()
 
@@ -179,7 +182,6 @@ class TradingService:
             grid_length=self.bot.grid_length,
             first_order_offset=self.bot.first_order_offset,
             num_orders=self.bot.num_orders,
-            partial_num_orders=0,
             next_order_volume=self.bot.next_order_volume,
             price=market_price,
             profit_percentage=self.bot.profit_percentage,

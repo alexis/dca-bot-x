@@ -64,6 +64,12 @@ class WebsocketManager:
             Order.exchange_order_id == str(order_id)
         ).first()
 
+        if order and status == "PARTIALLY_FILLED":
+            # Update order status
+            order.status = OrderStatusType.PARTIALLY_FILLED
+            order.exchange_order_data = msg
+            self.db.commit()
+
         if order and status == "FILLED":
             # Update order status
             order.status = OrderStatusType.FILLED

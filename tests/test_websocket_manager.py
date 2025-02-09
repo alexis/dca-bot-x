@@ -56,7 +56,8 @@ async def test_message_handler_execution_report_buy_order_filled(websocket_manag
         "o": "LIMIT",  # orderType
         "q": "0.02",  # quantity
         "p": "24000",  # price
-        "x": "TRADE"  # execution type
+        "x": "TRADE",  # execution type
+        "l": "0.02"  # executed quantity
     }
 
     websocket_manager._handle_execution_report(msg)
@@ -91,7 +92,8 @@ async def test_message_handler_execution_report_sell_order_filled(websocket_mana
         "o": "LIMIT",  # orderType
         "q": "0.02",  # quantity
         "p": "25000",  # price
-        "x": "TRADE"  # execution type
+        "x": "TRADE",  # execution type
+        "l": "0.02"  # executed quantity
     }
 
     websocket_manager._handle_execution_report(msg)
