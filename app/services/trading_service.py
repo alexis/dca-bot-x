@@ -138,7 +138,7 @@ class TradingService:
         while True:
             market_price = Decimal(self.client.ticker_price(symbol=self.bot.symbol)["price"])
 
-            if market_price > 60000:
+            if market_price > 60000 or self.bot.symbol != "BTCUSDT":
                 break
             time.sleep(5)
 
