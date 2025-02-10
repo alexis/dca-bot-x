@@ -13,7 +13,8 @@ from .models import Base, Bot
 from .database import engine, get_db
 from .routes import bot
 from .services.trading_service import TradingService
-from .services.websocket_manager import WebsocketManager
+from .services.bot_events_handler import BotEventsHandler
+from .services.bot_manager import BotManager
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -21,8 +22,9 @@ Base.metadata.create_all(bind=engine)
 logging.basicConfig(level=logging.DEBUG)
 
 app = FastAPI()
+bot_manager = BotManager()
 
-ENV = os.getenv('ENV', 'development')
+ENV = os.getenv("ENV", "development")
 
 # Get the absolute path to the templates directory
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
@@ -33,40 +35,40 @@ app.include_router(bot.router, prefix="/api/v1")
 
 # Initialize Binance client
 client = Spot(
-  api_key=os.getenv("BINANCE_API_KEY"),
-  api_secret=os.getenv("BINANCE_API_SECRET"),
-  base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") else 'https://api.binance.com'
+    api_key=os.getenv("BINANCE_API_KEY"),
+    api_secret=os.getenv("BINANCE_API_SECRET"),
+    base_url="https://testnet.binance.vision"
+    if os.getenv("BINANCE_TESTNET")
+    else "https://api.binance.com",
 )
 logging.info(f"Using {client.base_url} for Binance API")
 
+
 @app.on_event("startup")
 async def startup_event():
-    global ws_manager
-
-    # Initialize trading service and websocket manager
     db = next(get_db())
-    bot = db.query(Bot).first()
-    trading_service = TradingService(db=db, bot=bot)
-    trading_service.launch()
-    listen_key = trading_service.client.new_listen_key()["listenKey"]
+    # XXX check when it gets closed
+    bots = db.query(Bot).filter(Bot.is_active).all()
 
-    ws_manager = WebsocketManager(bot=bot, trading_service=trading_service, db=db, listen_key=listen_key)
-    await ws_manager.start()
+    # Initialize trading service and websocket manager for each bot
+    await bot_manager.install_bots(bots)
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    if ws_manager:
-        await ws_manager.ws_client.close_connection()
+    await bot_manager.release_all()
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get('/balance')
+
+@app.get("/balance")
 async def balance(assets: Optional[List[str]] = Query(None)):
     try:
         client.account()
-        account_info = client.account(omitZeroBalances='true')
+        account_info = client.account(omitZeroBalances="true")
         balances = account_info["balances"]
         if assets:
             balances = [x for x in balances if x["asset"] in set(assets)]
@@ -74,6 +76,7 @@ async def balance(assets: Optional[List[str]] = Query(None)):
     except Exception as e:
         logging.error(f"Error getting balance: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.post("/order")
 async def place_order(request: Request):
@@ -84,16 +87,17 @@ async def place_order(request: Request):
     try:
         order = client.new_order(
             symbol=pair,
-            side='BUY',
-            type='LIMIT',
-            timeInForce='GTC',
+            side="BUY",
+            type="LIMIT",
+            timeInForce="GTC",
             quantity=quantity,
-            price=price
+            price=price,
         )
         return order
     except Exception as e:
         logging.error(f"Error placing order: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

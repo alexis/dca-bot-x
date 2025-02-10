@@ -10,7 +10,7 @@ import logging
 import os
 import json
 
-class WebsocketManager:
+class BotEventsHandler:
     def __init__(self, bot: Bot, trading_service: TradingService, db: Session, listen_key: str):
         self.bot = bot
         self.trading_service = trading_service

@@ -1,14 +1,15 @@
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
-from app.services.websocket_manager import WebsocketManager
+from app.services.bot_events_handler import BotEventsHandler
 from app.models import Order
 from app.enums import OrderStatusType, SideType
 from decimal import Decimal
 import os
 import json
+
 @pytest.fixture
 def mock_ws_client():
-    with patch('app.services.websocket_manager.SpotWebsocketStreamClient') as mock:
+    with patch('app.services.bot_events_handler.SpotWebsocketStreamClient') as mock:
         client_instance = Mock()
         client_instance.ticker = Mock()
         mock.return_value = client_instance
@@ -24,8 +25,8 @@ def mock_trading_service():
     return service
 
 @pytest.fixture
-def websocket_manager(mock_trading_service, mock_ws_client, test_bot, db_session):
-    manager = WebsocketManager(
+def bot_events_handler(mock_trading_service, mock_ws_client, test_bot, db_session):
+    manager = BotEventsHandler(
         bot=test_bot,
         trading_service=mock_trading_service,
         db=db_session,
@@ -34,15 +35,15 @@ def websocket_manager(mock_trading_service, mock_ws_client, test_bot, db_session
     return manager
 
 @pytest.mark.asyncio
-async def test_start_websocket(websocket_manager, mock_ws_client):
-    await websocket_manager.start()
+async def test_start_websocket(bot_events_handler, mock_ws_client):
+    await bot_events_handler.start()
     
     # Verify user data subscription was made with listen key
     mock_ws_client.user_data.assert_called_once_with(listen_key="test_listen_key")
     mock_ws_client.ticker.assert_called()
 
 @pytest.mark.asyncio
-async def test_message_handler_execution_report_buy_order_filled(websocket_manager, mock_trading_service, test_cycle, test_order, db_session):
+async def test_message_handler_execution_report_buy_order_filled(bot_events_handler, mock_trading_service, test_cycle, test_order, db_session):
     # Set up mock trading service with cycle
     mock_trading_service.cycle = test_cycle
     
@@ -61,7 +62,7 @@ async def test_message_handler_execution_report_buy_order_filled(websocket_manag
         "z": "0.02"  # executed quantity
     }
 
-    websocket_manager._handle_execution_report(msg)
+    bot_events_handler._handle_execution_report(msg)
 
     # Verify order was updated - refresh from db to get latest status
     db_session.refresh(test_order)
@@ -72,7 +73,7 @@ async def test_message_handler_execution_report_buy_order_filled(websocket_manag
     mock_trading_service.update_take_profit_order.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_message_handler_execution_report_sell_order_filled(websocket_manager, mock_trading_service, test_cycle, test_order, db_session):
+async def test_message_handler_execution_report_sell_order_filled(bot_events_handler, mock_trading_service, test_cycle, test_order, db_session):
     # Set up mock trading service with cycle
     mock_trading_service.cycle = test_cycle
     
@@ -98,7 +99,7 @@ async def test_message_handler_execution_report_sell_order_filled(websocket_mana
         "z": "0.02"  # executed quantity
     }
 
-    websocket_manager._handle_execution_report(msg)
+    bot_events_handler._handle_execution_report(msg)
 
     # Verify order was updated - refresh from db to get latest status
     db_session.refresh(test_order)
@@ -109,18 +110,18 @@ async def test_message_handler_execution_report_sell_order_filled(websocket_mana
     mock_trading_service.check_cycle_completion.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_handle_price_update(websocket_manager, mock_trading_service):
+async def test_handle_price_update(bot_events_handler, mock_trading_service):
     # Simulate price update message
     msg = {
         "s": "BTCUSDT",
         "c": "25200"  # Current price
     }
 
-    websocket_manager._handle_price_update(msg)
+    bot_events_handler._handle_price_update(msg)
     mock_trading_service.check_grid_update.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_message_handler_price_update(websocket_manager, mock_trading_service):
+async def test_message_handler_price_update(bot_events_handler, mock_trading_service):
     # Simulate price update message
     msg = {
         "e": "24hrTicker",
@@ -128,7 +129,7 @@ async def test_message_handler_price_update(websocket_manager, mock_trading_serv
         "c": "25200"  # Current price
     }
 
-    websocket_manager.message_handler(None, json.dumps(msg))
+    bot_events_handler.message_handler(None, json.dumps(msg))
 
     # Verify that the price update handler was called
     mock_trading_service.check_grid_update.assert_called_once_with(25200)

@@ -5,8 +5,8 @@ services:
     ports:
       - "8000:80"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/trading_db
       - ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/trading_db
       - BINANCE_API_KEY
       - BINANCE_API_SECRET
       - BINANCE_TESTNET
@@ -18,9 +18,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=trading_db
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
     ports:
       - "5432:5432"
 

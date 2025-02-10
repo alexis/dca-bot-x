@@ -25,7 +25,8 @@ class TradingService:
     def launch(self):
         """Launch a new trading cycle for the bot"""
 
-        if not self.bot.is_active: return
+        if not self.bot.is_active:
+            return
 
         if self.cycle:
             self.query_open_orders()

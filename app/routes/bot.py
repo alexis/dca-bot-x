@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from ..services.trading_service import TradingService
-from ..services.websocket_manager import WebsocketManager
+from ..services.bot_events_handler import BotEventsHandler
 from ..models import Bot, TradingCycle, Order
 from ..schemas import (
     BotCreate, BotResponse,
