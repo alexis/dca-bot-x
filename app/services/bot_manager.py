@@ -16,7 +16,7 @@ class BotManager:
 
         self.active_bots.append(bot)
 
-        db = get_db(next)
+        db = next(get_db())
 
         trading_service = TradingService(db=db, bot=bot)
         trading_service.launch()
