@@ -226,7 +226,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
     ).first()
 
     assert updated_tp is not None
-    assert updated_tp.quantity == Decimal('0.03')
+    assert updated_tp.quantity == Decimal('0.02')
     assert updated_tp.price == Decimal('23230')
 
 def test_update_take_profit_order_no_existing_order(trading_service, mock_binance_client, test_cycle, db_session):

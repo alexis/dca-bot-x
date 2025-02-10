@@ -267,12 +267,15 @@ class TradingService:
 
         if tp_order and tp_order.status in (OrderStatusType.NEW, OrderStatusType.PARTIALLY_FILLED):
             try:
-                self.client.cancel_order(
+                response = self.client.cancel_order(
                     symbol=tp_order.symbol,
                     orderId=tp_order.exchange_order_id
                 )
-                tp_order.status = OrderStatusType.CANCELED
-                self.db.commit()
+
+                if response["status"] == "CANCELED":
+                    tp_order.quantity_filled = Decimal(response["executedQty"])
+                    tp_order.status = OrderStatusType.CANCELED
+                    self.db.commit()
 
             except Exception as e:
                 logging.error(f"Failed to cancel take profit order: {e}")

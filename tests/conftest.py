@@ -53,7 +53,8 @@ def mock_binance_client():
     # Mock cancel_order method
     client.cancel_order.return_value = {
         "orderId": 123,
-        "status": "CANCELED"
+        "status": "CANCELED",
+        "executedQty": "0.01"
     }
     
     # Mock account method
