@@ -125,6 +125,7 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
 
 def test_cancel_cycle_orders(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
+
     # Add some active orders
     orders = [
         Order(
@@ -223,8 +224,69 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
         Order.side == SideType.SELL,
         Order.status == OrderStatusType.NEW
     ).first()
+
     assert updated_tp is not None
+    assert updated_tp.quantity == 0.03
     assert updated_tp.price == Decimal('23230')
+
+def test_update_take_profit_order_no_existing_order(trading_service, mock_binance_client, test_cycle, db_session):
+    trading_service.cycle = test_cycle
+
+    # Create filled buy orders without any existing take profit order
+    filled_orders = [
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.FILLED,
+            cycle_id=test_cycle.id,
+            exchange_order_id=123,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            price=Decimal('24000'),
+            quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
+            amount=Decimal('480'),  # price * quantity
+            number=1
+        ),
+        Order(
+            exchange=test_cycle.exchange,
+            symbol=test_cycle.symbol,
+            side=SideType.BUY,
+            status=OrderStatusType.FILLED,
+            cycle_id=test_cycle.id,
+            exchange_order_id=124,
+            time_in_force=TimeInForceType.GTC,
+            type=OrderType.LIMIT,
+            price=Decimal('23000'),
+            quantity=Decimal('0.02'),
+            quantity_filled=Decimal('0.02'),
+            amount=Decimal('460'),  # price * quantity
+            number=2
+        )
+    ]
+    db_session.add_all(filled_orders)
+    db_session.commit()
+    
+    trading_service.update_take_profit_order()
+
+    # Verify new take profit order was created
+    tp_order = test_cycle.orders.filter(
+        Order.side == SideType.SELL,
+        Order.status == OrderStatusType.NEW
+    ).first()
+    
+    assert tp_order is not None
+    assert tp_order.side == SideType.SELL
+    assert tp_order.type == OrderType.LIMIT
+    assert tp_order.status == OrderStatusType.NEW
+    assert tp_order.quantity == 0.04
+    assert tp_order.price == 23735
+    
+    # Verify no cancel was attempted since there was no existing TP order
+    mock_binance_client.cancel_order.assert_not_called()
+    # Verify new order was placed
+    assert mock_binance_client.new_order.call_count == 1
 
 def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle

@@ -127,12 +127,10 @@ class TradingService:
         except Exception as e:
             raise Exception(f"Failed to create order: {e}")
 
-    def place_grid_orders(self) -> List[Order]:
-        """Place initial grid orders"""
-
-        # this is a hack to ensure the market price is above 60000
-        # to avoid failures "Filter failure: PERCENT_PRICE_BY_SIDE"
-        # happening in testnet because of high volatility in testnet
+    # this is a hack to ensure the market price is above 60000 on BTCUSDT pair
+    # to avoid failures "Filter failure: PERCENT_PRICE_BY_SIDE"
+    # happening in testnet because of high volatility in testnet
+    def fetch_market_price(self) -> Decimal:
         while True:
             market_price = Decimal(self.client.ticker_price(symbol=self.bot.symbol)["price"])
 
@@ -140,6 +138,12 @@ class TradingService:
                 break
             time.sleep(5)
 
+        return market_price
+
+    def place_grid_orders(self) -> List[Order]:
+        """Place initial grid orders"""
+
+        market_price = self.fetch_market_price()
         prices = self.calculate_grid_prices(market_price)
         quantities = self.calculate_grid_quantities(prices)
         
@@ -252,16 +256,17 @@ class TradingService:
                     symbol=tp_order.symbol,
                     orderId=tp_order.exchange_order_id
                 )
+                tp_order.status = OrderStatusType.CANCELED
+                self.db.commit()
+
             except Exception as e:
                 logging.error(f"Failed to cancel take profit order: {e}")
 
-            tp_order.status = OrderStatusType.CANCELED
+        if tp_order and tp_order.status == OrderStatusType.CANCELED or tp_order is None:
+            # Place new take profit order
+            new_tp = self.place_take_profit_order()
+            self.db.add(new_tp)
             self.db.commit()
-        
-        # Place new take profit order
-        new_tp = self.place_take_profit_order()
-        self.db.add(new_tp)
-        self.db.commit()
 
     def check_cycle_completion(self, tp_order: Order):
         """Check if cycle is completed and can be closed"""
@@ -274,8 +279,6 @@ class TradingService:
             # Start new cycle if bot is still active
             if self.bot.is_active:
                 self.start_new_cycle()
-        else:
-            raise ValueError(f"Cycle is not completed, {tp_order.quantity_filled} != {self.cycle.quantity}")
 
     def check_grid_update(self, current_price: float):
         """Check if grid needs to be updated based on price movement"""
