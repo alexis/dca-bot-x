@@ -88,8 +88,11 @@ class TradingService:
     def create_binance_order(self, side: str, price: Decimal, quantity: float, number: int) -> Order:
         """Create a Binance order and corresponding Order record"""
 
-        if (price * quantity) < 5: # TODO: Make this dynamic
-            raise Exception(f"Order notional value {price * quantity} is below minimum {5}")
+        notional_value = price * quantity
+        if self.bot.symbol == "PEPEUSDT" and notional_value < 1:  # TODO: Make this dynamic
+            raise Exception(f"Order notional value {notional_value} is below minimum {1}")
+        elif notional_value < 5:
+            raise Exception(f"Order notional value {notional_value} is below minimum {5}")
 
         # rounding
         quantity = Decimal(quantity).quantize(self._step_size(self.bot.symbol), rounding=ROUND_DOWN)
@@ -182,9 +185,12 @@ class TradingService:
         total_cost = sum(order.price * order.quantity_filled for order in filled_buy_orders)
         avg_price = total_cost / total_quantity
 
-        sell_quantity_filled = sum(order.quantity_filled for order in self.cycle.orders.filter(
+        sell_quantity_filled = self.db.query(
+            func.sum(Order.quantity_filled)
+        ).filter(
+            Order.cycle_id == self.cycle.id,
             Order.side == SideType.SELL
-        ).all())
+        ).scalar() or 0
 
         # Calculate take profit price
         take_profit_price = avg_price * (1 + self.bot.profit_percentage / 100)
