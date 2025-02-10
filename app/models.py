@@ -64,14 +64,16 @@ class TradingCycle(Base):
             ).all()
 
             sell_orders = self.orders.filter(
-                Order.side == SideType.SELL,
-                Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])
+                Order.side == SideType.SELL
             ).all()
 
             total_buy_amount = sum(order.quantity_filled * order.price for order in buy_orders)
             total_sell_amount = sum(order.quantity_filled * order.price for order in sell_orders)
 
-            return round((total_sell_amount - total_buy_amount), 2)
+            if sum(order.quantity_filled for order in sell_orders) != self.quantity:
+                return "quantity mismatch"
+            else:
+                return round((total_sell_amount - total_buy_amount), 2)
         else:
             return 0
 

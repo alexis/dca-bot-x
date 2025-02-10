@@ -674,6 +674,8 @@ def test_query_open_orders(trading_service, mock_binance_client, test_cycle, db_
     assert len(queried_orders) == 2
 
 def test_cycle_profit_calculation(test_cycle, db_session):
+    test_cycle.quantity = Decimal('0.04')
+
     # Create filled buy orders
     buy_orders = [
         Order(
