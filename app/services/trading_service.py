@@ -168,7 +168,8 @@ class TradingService:
             func.sum(Order.quantity)
         ).filter(
             Order.cycle_id == self.cycle.id,
-            Order.side == SideType.BUY
+            Order.side == SideType.BUY,
+            Order.status == OrderStatusType.NEW
         ).scalar()
 
         self.db.commit()
