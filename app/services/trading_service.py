@@ -298,10 +298,11 @@ class TradingService:
             return
 
         price_increase = (current_price - self.cycle.price) / self.cycle.price * 100
+        order_statuses = [status[0] for status in self.db.query(
+            func.distinct(Order.status)
+        ).filter(Order.cycle_id == self.cycle.id).all()]
 
-        if price_increase >= self.bot.price_change_percentage \
-            and all(order.status == OrderStatusType.NEW for order in self.cycle.orders.all()):
-
+        if price_increase >= self.bot.price_change_percentage and order_statuses == [OrderStatusType.NEW]:
             # Update cycle price
             self.cycle.price = current_price
             self.db.commit()
