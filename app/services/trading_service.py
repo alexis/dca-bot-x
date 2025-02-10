@@ -305,12 +305,12 @@ class TradingService:
 
         price_increase = (current_price - self.cycle.price) / self.cycle.price * 100
 
-        # Update cycle price
-        self.cycle.price = current_price
-        self.db.commit()
-
         if price_increase >= self.bot.price_change_percentage \
             and all(order.status == OrderStatusType.NEW for order in self.cycle.orders.all()):
+
+            # Update cycle price
+            self.cycle.price = current_price
+            self.db.commit()
 
             # Cancel existing orders and create new grid
             self.cancel_cycle_orders()

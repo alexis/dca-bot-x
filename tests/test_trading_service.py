@@ -540,9 +540,6 @@ def test_check_grid_update_with_filled_order(mock_cancel_orders, trading_service
 
     trading_service.check_grid_update(current_price)
 
-    # Verify cycle price was updated
-    assert test_cycle.price == current_price
-
     # Verify no grid update was performed since we have a filled order
     mock_cancel_orders.assert_not_called()
     mock_binance_client.new_order.assert_not_called()
@@ -601,9 +598,6 @@ def test_check_grid_update_small_change(trading_service, mock_binance_client, te
     current_price = 100001
 
     trading_service.check_grid_update(current_price)
-
-    assert test_cycle.price == current_price
-
     # Verify no grid update was performed
     mock_binance_client.cancel_order.assert_not_called()
     mock_binance_client.new_order.assert_not_called()
