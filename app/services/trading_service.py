@@ -4,6 +4,7 @@ from binance.spot import Spot
 from ..models import Bot, TradingCycle, Order
 from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, CycleStatusType
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import logging
 import os
 import time
@@ -84,14 +85,14 @@ class TradingService:
         
         return quantities
 
-    def create_binance_order(self, side: str, price: Decimal, quantity: Decimal, number: int) -> Order:
+    def create_binance_order(self, side: str, price: Decimal, quantity: float, number: int) -> Order:
         """Create a Binance order and corresponding Order record"""
 
         if (price * quantity) < 5: # TODO: Make this dynamic
             raise Exception(f"Order notional value {price * quantity} is below minimum {5}")
 
         # rounding
-        quantity = quantity.quantize(self._step_size(self.bot.symbol), rounding=ROUND_DOWN)
+        quantity = Decimal(quantity).quantize(self._step_size(self.bot.symbol), rounding=ROUND_DOWN)
         if self.bot.symbol == "PEPEUSDT":
             price = round(price, 8)
         else:
@@ -113,9 +114,9 @@ class TradingService:
                 side=SideType.BUY if side == "BUY" else SideType.SELL,
                 time_in_force=TimeInForceType.GTC,
                 type=OrderType.LIMIT,
-                price=float(price),
-                quantity=float(quantity),
-                amount=float(price * quantity),
+                price=price,
+                quantity=quantity,
+                amount=price * quantity,
                 status=OrderStatusType.NEW,
                 number=number,
                 exchange_order_id=binance_order["orderId"],
@@ -160,7 +161,13 @@ class TradingService:
         self.db.add_all(orders)
         self.db.commit()
 
-        self.cycle.quantity = sum(order.quantity for order in self.cycle.orders.all())
+        self.cycle.quantity = self.db.query(
+            func.sum(Order.quantity)
+        ).filter(
+            Order.cycle_id == self.cycle.id,
+            Order.side == SideType.BUY
+        ).scalar()
+
         self.db.commit()
 
     def place_take_profit_order(self) -> Order:
@@ -280,7 +287,7 @@ class TradingService:
             if self.bot.is_active:
                 self.start_new_cycle()
 
-    def check_grid_update(self, current_price: float):
+    def check_grid_update(self, current_price: Decimal):
         """Check if grid needs to be updated based on price movement"""
         if not self.cycle:
             return

@@ -66,7 +66,7 @@ def test_calculate_grid_quantities(trading_service):
     total_investment = sum(p * q for p, q in zip(prices, quantities))
     assert abs(total_investment - trading_service.bot.amount) < 1
 
-def test_place_grid_orders(trading_service, mock_binance_client, test_cycle):
+def test_place_grid_orders(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
     orders = trading_service.place_grid_orders()
     
@@ -74,7 +74,7 @@ def test_place_grid_orders(trading_service, mock_binance_client, test_cycle):
     assert all(isinstance(order, Order) for order in test_cycle.orders)
     assert all(order.side == SideType.BUY for order in test_cycle.orders)
     assert mock_binance_client.new_order.call_count == trading_service.bot.num_orders
-    assert test_cycle.quantity == sum(order.quantity for order in test_cycle.orders)
+    assert test_cycle.quantity == Decimal('0.01063')
 
 def test_place_take_profit_order(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
@@ -195,8 +195,8 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
         symbol=trading_service.bot.symbol,
         side=SideType.BUY,
         price=Decimal('23000'),
-        quantity=Decimal('0.03'),
-        quantity_filled=Decimal('0.03'),
+        quantity=0.03,
+        quantity_filled=0.03,
         status=OrderStatusType.FILLED,
         exchange_order_id=124,
         type=OrderType.LIMIT,
@@ -226,7 +226,7 @@ def test_update_take_profit_order(trading_service, mock_binance_client, test_cyc
     ).first()
 
     assert updated_tp is not None
-    assert updated_tp.quantity == 0.03
+    assert updated_tp.quantity == Decimal('0.03')
     assert updated_tp.price == Decimal('23230')
 
 def test_update_take_profit_order_no_existing_order(trading_service, mock_binance_client, test_cycle, db_session):
@@ -280,7 +280,7 @@ def test_update_take_profit_order_no_existing_order(trading_service, mock_binanc
     assert tp_order.side == SideType.SELL
     assert tp_order.type == OrderType.LIMIT
     assert tp_order.status == OrderStatusType.NEW
-    assert tp_order.quantity == 0.04
+    assert tp_order.quantity == Decimal('0.04')
     assert tp_order.price == 23735
     
     # Verify no cancel was attempted since there was no existing TP order
@@ -394,8 +394,8 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     # Test creating a buy order
     order = trading_service.create_binance_order(
         side="BUY",
-        price=Decimal('24000.00'),
-        quantity=Decimal('0.02000'),
+        price=24000,
+        quantity=Decimal('0.02'),
         number=1
     )
     
@@ -406,7 +406,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
         type="LIMIT",
         timeInForce="GTC",
         quantity="0.02000",
-        price="24000.00"
+        price="24000"
     )
     
     # Verify Order object was created correctly
@@ -415,9 +415,9 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     assert order.side == SideType.BUY
     assert order.type == OrderType.LIMIT
     assert order.time_in_force == TimeInForceType.GTC
-    assert order.price == float(24000)
-    assert order.quantity == float(0.02)
-    assert order.amount == float(24000 * 0.02)
+    assert order.price == Decimal('24000')
+    assert order.quantity == Decimal('0.02')
+    assert order.amount == round(24000 * 0.02, 2)
     assert order.status == OrderStatusType.NEW
     assert order.number == 1
     assert order.exchange_order_id == 12345

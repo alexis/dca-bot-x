@@ -1,5 +1,6 @@
 import asyncio
 from typing import Dict, Set
+from decimal import Decimal
 from binance.websocket.spot.websocket_stream import SpotWebsocketStreamClient
 from ..models import Bot, Order
 from .trading_service import TradingService
@@ -47,7 +48,7 @@ class WebsocketManager:
     def _handle_price_update(self, msg: dict):
         """Handle price updates and check if grid needs to be updated"""
         symbol = msg.get("s")
-        price = float(msg.get("c", 0))
+        price = Decimal(msg.get("c", 0))
         
         if self.bot.symbol == symbol:
             self.trading_service.check_grid_update(price)
@@ -57,7 +58,7 @@ class WebsocketManager:
 
         order_id = msg.get("i")
         status = msg.get("X")
-        quantity_filled = float(msg.get("z"))
+        quantity_filled = Decimal(msg.get("z"))
         
         # Find order in the database
         order = self.trading_service.cycle.orders.filter(
