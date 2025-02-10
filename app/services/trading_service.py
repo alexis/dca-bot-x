@@ -38,12 +38,8 @@ class TradingService:
 
     def calculate_grid_prices(self, market_price: Decimal) -> List[Decimal]:
         """Calculate grid order prices"""
-        # Convert bot parameters to Decimal to ensure consistent arithmetic
-        first_order_offset = Decimal(str(self.bot.first_order_offset))
-        grid_length = Decimal(str(self.bot.grid_length))
-        
-        first_order_price = market_price * (Decimal('1') - first_order_offset / Decimal('100'))
-        total_drop = first_order_price * (grid_length / Decimal('100'))
+        first_order_price = market_price * (Decimal('1') - self.bot.first_order_offset / Decimal('100'))
+        total_drop = first_order_price * (self.bot.grid_length / Decimal('100'))
         price_step = total_drop / (Decimal(str(self.bot.num_orders - 1))) if self.bot.num_orders > 1 else Decimal('0')
         
         prices = []
@@ -66,22 +62,18 @@ class TradingService:
             raise ValueError(f"Unsupported symbol: {symbol}")
 
     def calculate_grid_quantities(self, prices: List[Decimal]) -> List[Decimal]:
-        """Calculate quantities for each grid level"""
-        # Convert bot parameters to Decimal
-        amount = Decimal(str(self.bot.amount))
-        next_order_volume = Decimal(str(self.bot.next_order_volume))
-        
-        base_quantity = amount / sum(prices)  # Initial equal distribution
+        """Calculate quantities for each grid level"""        
+        base_quantity = self.bot.amount / sum(prices)  # Initial equal distribution
         quantities = []
         
         current_quantity = base_quantity
         for _ in range(self.bot.num_orders):
             quantities.append(current_quantity)
-            current_quantity *= (Decimal('1') + next_order_volume / Decimal('100'))
+            current_quantity *= (Decimal('1') + self.bot.next_order_volume / Decimal('100'))
             
         # Normalize quantities to match total amount
         total_value = sum(p * q for p, q in zip(prices, quantities))
-        scale_factor = amount / total_value
+        scale_factor = self.bot.amount / total_value
         quantities = [q * scale_factor for q in quantities]
         
         return quantities
