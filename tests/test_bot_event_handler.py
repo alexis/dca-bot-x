@@ -22,6 +22,7 @@ def mock_trading_service():
     service.check_cycle_completion = Mock()
     service.cancel_cycle_orders = Mock()
     service.place_grid_orders = Mock(return_value=[])
+    service.sell_quantity_filled = Mock(return_value=Decimal('0'))
     return service
 
 @pytest.fixture

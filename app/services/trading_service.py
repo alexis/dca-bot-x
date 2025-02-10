@@ -167,6 +167,14 @@ class TradingService:
 
         self.db.commit()
 
+    def sell_quantity_filled(self) -> Decimal:
+        return self.db.query(
+            func.sum(Order.quantity_filled)
+        ).filter(
+            Order.cycle_id == self.cycle.id,
+            Order.side == SideType.SELL
+        ).scalar() or 0
+
     def place_take_profit_order(self) -> Order:
         filled_buy_orders = self.cycle.orders.filter(
             Order.side == SideType.BUY,
@@ -179,20 +187,13 @@ class TradingService:
         total_cost = sum(order.price * order.quantity_filled for order in filled_buy_orders)
         avg_price = total_cost / total_quantity
 
-        sell_quantity_filled = self.db.query(
-            func.sum(Order.quantity_filled)
-        ).filter(
-            Order.cycle_id == self.cycle.id,
-            Order.side == SideType.SELL
-        ).scalar() or 0
-
         # Calculate take profit price
         take_profit_price = avg_price * (1 + self.bot.profit_percentage / 100)
         
         return self.create_binance_order(
             side="SELL",
             price=Decimal(str(take_profit_price)),
-            quantity=Decimal(str(total_quantity - sell_quantity_filled)),
+            quantity=Decimal(str(total_quantity - self.sell_quantity_filled())),
             number=len(filled_buy_orders) + 1
         )
 
@@ -240,15 +241,16 @@ class TradingService:
 
         for order in orders:
             try:
-                self.client.cancel_order(
+                response = self.client.cancel_order(
                     symbol=order.symbol,
                     orderId=order.exchange_order_id
                 )
+                if response["status"] == "CANCELED":
+                    order.quantity_filled = Decimal(response["executedQty"])
+                    order.status = OrderStatusType.CANCELED
+                    self.db.commit()
             except Exception as e:
                 logging.error(f"Failed to cancel order {order.exchange_order_id}: {e}")
-            order.status = OrderStatusType.CANCELED
-
-        self.db.commit()
 
     def update_take_profit_order(self):
         """Update or place take profit order after a buy order is filled"""
@@ -278,10 +280,10 @@ class TradingService:
             self.db.add(new_tp)
             self.db.commit()
 
-    def check_cycle_completion(self, tp_order: Order):
+    def check_cycle_completion(self):
         """Check if cycle is completed and can be closed"""
 
-        if tp_order.quantity_filled == self.cycle.quantity:
+        if self.sell_quantity_filled() == self.cycle.quantity:
             # Mark cycle as completed
             self.cycle.status = CycleStatusType.COMPLETED
             self.db.commit()

@@ -75,4 +75,4 @@ class BotEventsHandler:
             if order.side == SideType.BUY:
                 self.trading_service.update_take_profit_order()
             elif order.side == SideType.SELL and status == "FILLED":
-                self.trading_service.check_cycle_completion(order)
+                self.trading_service.check_cycle_completion()

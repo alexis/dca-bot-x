@@ -331,7 +331,7 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle
     db_session.add(tp_order)
     db_session.commit()
     
-    trading_service.check_cycle_completion(tp_order)
+    trading_service.check_cycle_completion()
     
     assert test_cycle.status == CycleStatusType.COMPLETED
     # Should try to start a new cycle since bot is active
