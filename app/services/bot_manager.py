@@ -1,6 +1,5 @@
 import asyncio
 
-from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -14,9 +13,11 @@ class BotManager:
         self.events_handlers = {}
         self.active_bots = []
 
-    async def install(self, bot: Bot, db: Session = Depends(get_db)):
+    async def install(self, bot: Bot, db: Session = None):
         if not bot.is_active:
             return
+
+        db = db or next(get_db())
 
         bot = db.merge(bot)
 
