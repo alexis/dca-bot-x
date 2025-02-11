@@ -65,7 +65,10 @@ class BotEventsHandler:
             Order.exchange_order_id == str(order_id)
         ).first()
 
-        if order and status in ("PARTIALLY_FILLED", "FILLED"):
+        if not order:
+            logging.info(f"Order not found: {order_id}")
+
+        if order and status in ("CANCELED", "PARTIALLY_FILLED", "FILLED"):
             # Update order
             order.status = status
             order.quantity_filled = quantity_filled

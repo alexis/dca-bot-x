@@ -42,7 +42,9 @@ def test_launch_new_cycle(trading_service, test_bot, mock_binance_client, db_ses
     assert len(orders) == test_bot.num_orders
     assert all(order.status == OrderStatusType.NEW for order in orders)
 
-def test_calculate_grid_prices(trading_service):
+def test_calculate_grid_prices(trading_service, test_cycle):
+    trading_service.cycle = test_cycle
+
     market_price = Decimal('125000')
     prices = trading_service.calculate_grid_prices(market_price)
     
@@ -54,7 +56,9 @@ def test_calculate_grid_prices(trading_service):
     intervals = [prices[i] - prices[i+1] for i in range(len(prices)-1)]
     assert all(abs(intervals[0] - interval) < Decimal('0.0001') for interval in intervals)
 
-def test_calculate_grid_quantities(trading_service):
+def test_calculate_grid_quantities(trading_service, test_cycle):
+    trading_service.cycle = test_cycle
+
     prices = [Decimal('125000'), Decimal('124750'), Decimal('124500'), Decimal('124250'), Decimal('124000')]
     quantities = trading_service.calculate_grid_quantities(prices)
     
@@ -62,6 +66,34 @@ def test_calculate_grid_quantities(trading_service):
     assert all(q > Decimal('0') for q in quantities)
     assert quantities[1] > quantities[0]  # Check increasing quantities
     
+    # Check total investment matches bot amount
+    total_investment = sum(p * q for p, q in zip(prices, quantities))
+    assert abs(total_investment - trading_service.bot.amount) < 1
+
+def test_calculate_grid_quantities_with_filled_amount(trading_service, test_cycle, db_session):
+    trading_service.cycle = test_cycle
+
+    buy_order = Order(
+        exchange=test_cycle.exchange,
+        symbol=test_cycle.symbol,
+        side=SideType.BUY,
+        status=OrderStatusType.CANCELED,
+        cycle_id=test_cycle.id,
+        quantity_filled=Decimal('0.001'),
+        price=Decimal('100000'),
+        quantity=Decimal('0.01'),
+        amount=Decimal('0'),
+        time_in_force=TimeInForceType.GTC,
+        type=OrderType.LIMIT,
+        number=1,
+        exchange_order_id=123
+    )
+    db_session.add(buy_order)
+    db_session.commit()
+
+    prices = [Decimal('125000'), Decimal('124750'), Decimal('124500'), Decimal('124250'), Decimal('124000')]
+    quantities = trading_service.calculate_grid_quantities(prices)
+
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
     assert abs(total_investment - trading_service.bot.amount) < 1
@@ -115,8 +147,12 @@ def test_place_take_profit_order(trading_service, mock_binance_client, test_cycl
     db_session.add_all(filled_orders)
     db_session.commit()
     
-    tp_order = trading_service.place_take_profit_order()
-    
+    trading_service.place_take_profit_order()
+    tp_order = test_cycle.orders.filter(
+        Order.side == SideType.SELL,
+        Order.status == OrderStatusType.NEW
+    ).first()
+
     assert isinstance(tp_order, Order)
     assert tp_order.side == SideType.SELL
     assert tp_order.type == OrderType.LIMIT
@@ -380,7 +416,7 @@ def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client,
     with pytest.raises(ValueError, match=f"Bot {trading_service.bot.name} already has an active cycle"):
         trading_service.start_new_cycle()
 
-def test_create_binance_order_success(trading_service, mock_binance_client, test_cycle):
+def test_create_binance_order_success(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
     # Setup mock response
     mock_binance_order = {
@@ -392,7 +428,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     mock_binance_client.new_order.return_value = mock_binance_order
     
     # Test creating a buy order
-    order = trading_service.create_binance_order(
+    trading_service.create_binance_order(
         side="BUY",
         price=24000,
         quantity=Decimal('0.02'),
@@ -409,6 +445,10 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
         price="24000"
     )
     
+    order = test_cycle.orders.filter(
+        Order.exchange_order_id == 12345
+    ).first()
+
     # Verify Order object was created correctly
     assert order.exchange == trading_service.bot.exchange
     assert order.symbol == trading_service.bot.symbol
@@ -642,8 +682,8 @@ def test_query_open_orders(trading_service, mock_binance_client, test_cycle, db_
 
     # Mock Binance API responses
     mock_binance_client.get_order.side_effect = [
-        {"orderId": 123, "status": "FILLED"},
-        {"orderId": 124, "status": "PARTIALLY_FILLED"}
+        {"orderId": 123, "status": "FILLED", "executedQty": "0.02"},
+        {"orderId": 124, "status": "PARTIALLY_FILLED", "executedQty": "0.01"}
     ]
 
     # Call the method
