@@ -1,39 +1,42 @@
 import asyncio
-from ..models import Bot
+
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 from ..database import get_db
-from .trading_service import TradingService
+from ..models import Bot
 from .bot_events_handler import BotEventsHandler
+from .trading_service import TradingService
 
 
 class BotManager:
     def __init__(self):
-        self.ws_managers = {}
+        self.events_handlers = {}
         self.active_bots = []
 
-    async def install(self, bot: Bot):
+    async def install(self, bot: Bot, db: Session = Depends(get_db)):
         if not bot.is_active:
             return
 
-        db = next(get_db())
-
         bot = db.merge(bot)
+
         self.active_bots.append(bot)
 
         trading_service = TradingService(db=db, bot=bot)
         trading_service.launch()
         listen_key = trading_service.client.new_listen_key()["listenKey"]
 
-        ws_manager = BotEventsHandler(
+        events_handler = BotEventsHandler(
             bot=bot, trading_service=trading_service, db=db, listen_key=listen_key
         )
-        self.ws_managers[bot.id] = ws_manager
+        self.events_handlers[bot.id] = events_handler
 
-        await ws_manager.start()
+        await events_handler.start()
 
     async def release(self, bot):
-        ws_manager = self.ws_managers[bot.id]
+        ws_manager = self.events_handlers[bot.id]
         await ws_manager.ws_client.close_connection()
-        del self.ws_managers[bot.id]
+        del self.events_handlers[bot.id]
         self.active_bots.remove(bot)
 
     async def install_bots(self, bots):

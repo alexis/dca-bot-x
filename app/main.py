@@ -1,19 +1,15 @@
-from fastapi import FastAPI, WebSocket, Request, Query, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, Request, Query, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from binance.spot import Spot
 import asyncio
 import logging
 import json
 import os
 from typing import List, Optional
-from uuid import UUID
 from .models import Base, Bot
 from .database import engine, get_db
 from .routes import bot
-from .services.trading_service import TradingService
-from .services.bot_events_handler import BotEventsHandler
 from .services.bot_manager import BotManager
 
 # Create tables
@@ -43,16 +39,13 @@ client = Spot(
 )
 logging.info(f"Using {client.base_url} for Binance API")
 
-
 @app.on_event("startup")
 async def startup_event():
     db = next(get_db())
-    # XXX check when it gets closed
     bots = db.query(Bot).filter(Bot.is_active).all()
 
     # Initialize trading service and websocket manager for each bot
     await bot_manager.install_bots(bots)
-
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -108,10 +101,7 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             btc_usdt = client.ticker_price(symbol="BTCUSDT")
             eth_usdt = client.ticker_price(symbol="ETHUSDT")
-            prices = {
-                "BTCUSDT": btc_usdt["price"],
-                "ETHUSDT": eth_usdt["price"]
-            }
+            prices = {"BTCUSDT": btc_usdt["price"], "ETHUSDT": eth_usdt["price"]}
             await websocket.send_text(json.dumps(prices))
             await asyncio.sleep(0.5)  # Send price updates every 0.5 sec
         except Exception as e:

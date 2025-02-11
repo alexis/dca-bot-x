@@ -7,6 +7,7 @@ services:
       - POSTGRES_DB=test_trading_db
     ports:
       - "5433:5432"
+    command: ["postgres", "-c", "log_statement=all"]
 
   test:
     build: .

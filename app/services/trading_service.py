@@ -82,7 +82,7 @@ class TradingService:
         
         return quantities
 
-    def create_binance_order(self, side: str, price: Decimal, quantity: float, number: int) -> Order:
+    def create_binance_order(self, side: str, price: Decimal, quantity: Decimal, number: int):
         """Create a Binance order and corresponding Order record"""
 
         notional_value = price * quantity
@@ -142,16 +142,15 @@ class TradingService:
 
         return market_price
 
-    def place_grid_orders(self) -> List[Order]:
+    def place_grid_orders(self):
         """Place initial grid orders"""
 
         market_price = self.fetch_market_price()
         prices = self.calculate_grid_prices(market_price)
         quantities = self.calculate_grid_quantities(prices)
         
-        orders = []
         for i, (price, quantity) in enumerate(zip(prices, quantities)):
-            order = self.create_binance_order(
+            self.create_binance_order(
                 side="BUY",
                 price=price,
                 quantity=quantity,
@@ -181,7 +180,7 @@ class TradingService:
             Order.side == SideType.BUY
         ).all()
 
-    def place_take_profit_order(self) -> Order:
+    def place_take_profit_order(self):
         """Place or update take profit order"""
         # Calculate average buy price and total quantity
         total_quantity = sum(order.quantity_filled for order in self.buy_orders())
