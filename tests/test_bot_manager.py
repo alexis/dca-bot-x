@@ -12,6 +12,26 @@ def bot_manager():
     """Create a fresh BotManager instance for each test"""
     return BotManager()
 
+class MockTradingService:
+    def __init__(self, **kwargs):
+        self.client = AsyncMock()
+        self.client.new_listen_key.return_value = {"listenKey": "test_listen_key"}
+        self.launch = AsyncMock()
+        self.initialize = AsyncMock()
+        self.db = kwargs.get('db')
+        self.bot = kwargs.get('bot')
+
+class MockBotEventsHandler:
+    def __init__(self, **kwargs):
+        self.ws_client = AsyncMock()
+        self.ws_client.close_connection = AsyncMock()
+        self.start = AsyncMock()
+        self.stop = AsyncMock()
+        self.db = kwargs.get('db')
+        self.bot = kwargs.get('bot')
+        self.trading_service = kwargs.get('trading_service')
+
+
 @pytest.mark.skip
 @pytest.mark.asyncio
 async def test_install_bot(db_session, bot_manager, test_bot):
@@ -38,22 +58,22 @@ async def test_install_bot(db_session, bot_manager, test_bot):
 @pytest.mark.asyncio
 async def test_release_bot(bot_manager, test_bot):
     """Test releasing an active bot"""
-    mock_ws_manager = AsyncMock()
-    mock_ws_manager.ws_client.close_connection = AsyncMock()
-
-    bot_manager.events_handlers[test_bot.id] = mock_ws_manager
+    mock_trading_service = MockTradingService(bot=test_bot)
+    mock_events_handler = MockBotEventsHandler(bot=test_bot, trading_service=mock_trading_service)
+    
+    # Add bot to active bots
     bot_manager.active_bots.append(test_bot)
+    bot_manager.events_handlers[test_bot.id] = mock_events_handler
 
     await bot_manager.release(test_bot)
 
     assert test_bot.id not in bot_manager.events_handlers
     assert test_bot not in bot_manager.active_bots
-    mock_ws_manager.ws_client.close_connection.assert_awaited()
-
+    mock_events_handler.ws_client.close_connection.assert_awaited_once()
 
 @pytest.mark.skip
 @pytest.mark.asyncio
-async def test_install_bots(db_session, bot_manager):
+async def test_install_bots(bot_manager):
     """Test installing multiple bots"""
     bots = [Bot(id='1', name='B', is_active=True), Bot(id='2', name='C', is_active=True)]
 
@@ -67,17 +87,17 @@ async def test_install_bots(db_session, bot_manager):
     assert len(bot_manager.active_bots) == 2
     assert all(bot.id in bot_manager.events_handlers for bot in bots)
 
-
-@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_release_all(bot_manager):
     """Test releasing all active bots"""
     bots = [Bot(id='1', name='B', is_active=True), Bot(id='2', name='C', is_active=True)]
 
+    mock_handlers = {}
     for bot in bots:
-        mock_ws_manager = AsyncMock()
-        mock_ws_manager.ws_client.close_connection = AsyncMock()
-        bot_manager.events_handlers[bot.id] = mock_ws_manager
+        mock_trading_service = MockTradingService(bot=bot)
+        mock_handler = MockBotEventsHandler(bot=bot, trading_service=mock_trading_service)
+        mock_handlers[bot.id] = mock_handler
+        bot_manager.events_handlers[bot.id] = mock_handler
         bot_manager.active_bots.append(bot)
 
     await bot_manager.release_all()
@@ -85,4 +105,4 @@ async def test_release_all(bot_manager):
     assert not bot_manager.active_bots
     assert not bot_manager.events_handlers
     for bot in bots:
-        bot_manager.events_handlers.get(bot.id, AsyncMock()).ws_client.close_connection.assert_awaited()
+        mock_handlers[bot.id].ws_client.close_connection.assert_awaited_once()
