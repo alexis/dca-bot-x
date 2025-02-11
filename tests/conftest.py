@@ -42,13 +42,18 @@ def mock_binance_client():
     # Mock ticker_price method
     client.ticker_price.return_value = {"price": "100000"}
     
-    # Mock new_order method
-    client.new_order.return_value = {
-        "orderId": 123,
-        "status": "NEW",
-        "executedQty": "0",
-        "cummulativeQuoteQty": "0"
-    }
+    # Mock new_order method with incrementing order IDs
+    order_id_counter = 10000
+    def new_order_side_effect(*args, **kwargs):
+        nonlocal order_id_counter
+        order_id_counter += 1
+        return {
+            "orderId": order_id_counter,
+            "status": "NEW",
+            "executedQty": "0",
+            "cummulativeQuoteQty": "0"
+        }
+    client.new_order.side_effect = new_order_side_effect
     
     # Mock cancel_order method
     client.cancel_order.return_value = {

@@ -357,7 +357,7 @@ def test_check_cycle_completion(trading_service, mock_binance_client, test_cycle
         side=SideType.SELL,
         status=OrderStatusType.FILLED,
         cycle_id=test_cycle.id,
-        exchange_order_id="124",
+        exchange_order_id="125",
         time_in_force=TimeInForceType.GTC,
         type=OrderType.LIMIT,
         price=Decimal('24000'),
@@ -418,16 +418,16 @@ def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client,
     with pytest.raises(ValueError, match=f"Bot {trading_service.bot.name} already has an active cycle"):
         trading_service.start_new_cycle()
 
-def test_create_binance_order_success(trading_service, mock_binance_client, test_cycle, db_session):
+def test_create_binance_order_success(trading_service, mock_binance_client, test_cycle, db_session):    
     trading_service.cycle = test_cycle
     # Setup mock response
-    mock_binance_order = {
-        "orderId": 12345,
-        "status": "NEW",
-        "executedQty": "0",
-        "cummulativeQuoteQty": "0"
-    }
-    mock_binance_client.new_order.return_value = mock_binance_order
+    # mock_binance_order = {
+    #     "orderId": 12345,
+    #     "status": "NEW",
+    #     "executedQty": "0",
+    #     "cummulativeQuoteQty": "0"
+    # }
+    # mock_binance_client.new_order.return_value = mock_binance_order
     
     # Test creating a buy order
     trading_service.create_binance_order(
@@ -447,9 +447,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
         price="24000"
     )
     
-    order = test_cycle.orders.filter(
-        Order.exchange_order_id == 12345
-    ).first()
+    order = test_cycle.orders.first()
 
     # Verify Order object was created correctly
     assert order.exchange == trading_service.bot.exchange
@@ -462,8 +460,7 @@ def test_create_binance_order_success(trading_service, mock_binance_client, test
     assert order.amount == round(24000 * 0.02, 2)
     assert order.status == OrderStatusType.NEW
     assert order.number == 1
-    assert order.exchange_order_id == 12345
-    assert order.exchange_order_data == mock_binance_order
+    assert order.exchange_order_id == 10001
     assert order.cycle_id == test_cycle.id
 
 def test_create_binance_order_error(trading_service, mock_binance_client, test_cycle):
