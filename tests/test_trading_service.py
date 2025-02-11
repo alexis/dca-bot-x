@@ -68,7 +68,8 @@ def test_calculate_grid_quantities(trading_service, test_cycle):
     
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
-    assert abs(total_investment - trading_service.bot.amount) < 1
+    assert (trading_service.bot.amount - total_investment) < 1
+    assert total_investment < trading_service.bot.amount
 
 def test_calculate_grid_quantities_with_filled_amount(trading_service, test_cycle, db_session):
     trading_service.cycle = test_cycle
@@ -96,7 +97,8 @@ def test_calculate_grid_quantities_with_filled_amount(trading_service, test_cycl
 
     # Check total investment matches bot amount
     total_investment = sum(p * q for p, q in zip(prices, quantities))
-    assert abs(total_investment - trading_service.bot.amount) < 1
+    assert (trading_service.bot.amount - total_investment) < 1
+    assert total_investment < trading_service.bot.amount
 
 def test_place_grid_orders(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle

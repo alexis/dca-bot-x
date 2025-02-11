@@ -67,7 +67,7 @@ class TradingService:
         if filled_amount >= self.cycle.amount:
             raise Exception(f"Filled amount {filled_amount} is greater than the cycle amount {self.cycle.amount}")
 
-        base_quantity = (self.cycle.amount - filled_amount) / sum(prices)  # Initial equal distribution
+        base_quantity = (self.cycle.amount - filled_amount) / sum(prices)
         quantities = []
         
         current_quantity = base_quantity
