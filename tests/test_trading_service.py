@@ -420,14 +420,6 @@ def test_start_new_cycle_with_active_cycle(trading_service, mock_binance_client,
 
 def test_create_binance_order_success(trading_service, mock_binance_client, test_cycle, db_session):    
     trading_service.cycle = test_cycle
-    # Setup mock response
-    # mock_binance_order = {
-    #     "orderId": 12345,
-    #     "status": "NEW",
-    #     "executedQty": "0",
-    #     "cummulativeQuoteQty": "0"
-    # }
-    # mock_binance_client.new_order.return_value = mock_binance_order
     
     # Test creating a buy order
     trading_service.create_binance_order(
@@ -596,43 +588,6 @@ def test_check_grid_update_without_cycle(trading_service, mock_binance_client):
 
 def test_check_grid_update_small_change(trading_service, mock_binance_client, test_cycle, db_session):
     trading_service.cycle = test_cycle
-
-    orders = [
-        Order(
-            exchange=test_cycle.exchange,
-            symbol=test_cycle.symbol,
-            side=SideType.BUY,
-            status=OrderStatusType.NEW,
-            cycle_id=test_cycle.id,
-            price=Decimal('24000'),
-            quantity=Decimal('0.02'),
-            quantity_filled=Decimal('0'),
-            amount=Decimal('480'),
-            number=1,
-            time_in_force=TimeInForceType.GTC,
-            type=OrderType.LIMIT,
-            exchange_order_id=123,
-            exchange_order_data={}
-        ),
-        Order(
-            exchange=test_cycle.exchange,
-            symbol=test_cycle.symbol,
-            side=SideType.BUY,
-            status=OrderStatusType.NEW,
-            cycle_id=test_cycle.id,
-            price=Decimal('24000'),
-            quantity=Decimal('0.02'),
-            quantity_filled=Decimal('0'),
-            amount=Decimal('480'),
-            number=2,
-            time_in_force=TimeInForceType.GTC,
-            type=OrderType.LIMIT,
-            exchange_order_id=124,
-            exchange_order_data={}
-        )
-    ]
-    db_session.add_all(orders)
-    db_session.commit()
     
     current_price = 100001
 
