@@ -36,7 +36,7 @@ async def test_install_bot(bot_manager, test_bot):
     """Test if a bot is correctly installed"""
     await bot_manager.install(test_bot)
 
-    assert test_bot in bot_manager.active_bots
+    assert test_bot.id in [bot.id for bot in bot_manager.active_bots]
     assert test_bot.id in bot_manager.events_handlers
     bot_manager.events_handlers[test_bot.id].start.assert_awaited_once()
 
@@ -59,7 +59,7 @@ async def test_release_bot(bot_manager, test_bot):
 @pytest.mark.asyncio
 async def test_install_bots(bot_manager):
     """Test installing multiple bots"""
-    bots = [Bot(id='1', name='B', is_active=True), Bot(id='2', name='C', is_active=True)]
+    bots = [Bot(id=uuid4(), name='B', is_active=True), Bot(id=uuid4(), name='C', is_active=True)]
 
     await bot_manager.install_bots(bots)
 
@@ -69,7 +69,7 @@ async def test_install_bots(bot_manager):
 @pytest.mark.asyncio
 async def test_release_all(bot_manager):
     """Test releasing all active bots"""
-    bots = [Bot(id='1', name='B', is_active=True), Bot(id='2', name='C', is_active=True)]
+    bots = [Bot(id=uuid4(), name='B', is_active=True), Bot(id=uuid4(), name='C', is_active=True)]
 
     mock_handlers = {}
     for bot in bots:
