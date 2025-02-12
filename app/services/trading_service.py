@@ -179,7 +179,7 @@ class TradingService:
         ).filter(
             Order.cycle_id == self.cycle.id,
             Order.side == SideType.SELL
-        ).scalar() or 0
+        ).scalar() or Decimal(0)
 
     def buy_orders(self) -> List[Order]:
         return self.cycle.orders.filter(

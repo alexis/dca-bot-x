@@ -20,9 +20,8 @@ class BotManager:
         if not bot.is_active:
             return
 
-        if not db:
-            db = next(get_db())
-            bot = db.merge(bot)
+        db = db or next(get_db())
+        bot = db.merge(bot)
 
         self.active_bots.append(bot)
         trading_service = self.trading_service_class(db=db, bot=bot)
