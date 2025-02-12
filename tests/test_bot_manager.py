@@ -24,9 +24,8 @@ class MockTradingService:
 class MockBotEventsHandler:
     def __init__(self, **kwargs):
         self.ws_client = AsyncMock()
-        self.ws_client.close_connection = AsyncMock()
+        self.ws_client.stop = MagicMock()
         self.start = AsyncMock()
-        self.stop = AsyncMock()
         self.db = kwargs.get('db')
         self.bot = kwargs.get('bot')
         self.trading_service = kwargs.get('trading_service')
@@ -45,7 +44,7 @@ async def test_release_bot(bot_manager, test_bot):
     """Test releasing an active bot"""
     mock_trading_service = MockTradingService(bot=test_bot)
     mock_events_handler = MockBotEventsHandler(bot=test_bot, trading_service=mock_trading_service)
-    
+
     # Add bot to active bots
     bot_manager.active_bots.append(test_bot)
     bot_manager.events_handlers[test_bot.id] = mock_events_handler
@@ -54,7 +53,7 @@ async def test_release_bot(bot_manager, test_bot):
 
     assert test_bot.id not in bot_manager.events_handlers
     assert test_bot not in bot_manager.active_bots
-    mock_events_handler.ws_client.close_connection.assert_awaited_once()
+    mock_events_handler.ws_client.stop.assert_called_once_with()
 
 @pytest.mark.asyncio
 async def test_install_bots(bot_manager):
@@ -84,4 +83,4 @@ async def test_release_all(bot_manager):
     assert not bot_manager.active_bots
     assert not bot_manager.events_handlers
     for bot in bots:
-        mock_handlers[bot.id].ws_client.close_connection.assert_awaited_once()
+        mock_handlers[bot.id].ws_client.stop.assert_called_once_with()
