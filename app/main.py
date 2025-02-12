@@ -87,10 +87,12 @@ async def list_bots(request: Request, db: Session = Depends(get_db)):
 @app.get("/bots/{bot_id}", response_class=HTMLResponse)
 async def bot_detail(request: Request, bot_id: str, db: Session = Depends(get_db)):
     bot_obj = db.query(Bot).filter(Bot.id == bot_id).first()
+    current_cycle = TradingService(bot=bot_obj, db=db).cycle
     if not bot_obj:
         raise HTTPException(status_code=404, detail="Bot not found")
 
-    return templates.TemplateResponse("bot_details.html", {"request": request, "bot": bot_obj })
+    return templates.TemplateResponse("bot_details.html", {"request": request, "bot": bot_obj,
+                                                           "current_cycle": current_cycle })
 
 @app.get("/bots/{bot_id}/dashboard", response_class=HTMLResponse)
 async def bot_dashboard(request: Request, bot_id: str, db: Session = Depends(get_db)):
@@ -102,7 +104,6 @@ async def bot_dashboard(request: Request, bot_id: str, db: Session = Depends(get
 
 @app.put("/bots/{bot_id}")
 async def update_bot(
-    request: Request,
     bot_id: str,
     name: str = Form(...),
     is_active: str = Form(...),
@@ -140,7 +141,6 @@ async def update_bot(
 
 @app.post("/bots/")
 async def create_bot(
-    request: Request,
     name: str = Form(...),
     api_key: str = Form(...),
     api_secret: str = Form(...),
@@ -166,7 +166,7 @@ async def create_bot(
         )
         db.add(new_bot)
         db.commit()
-        # Redirect back to the bots list page after creation
+
         return RedirectResponse(url="/bots", status_code=302)
     except Exception as e:
         logging.error(f"Error placing order: {e}")

@@ -126,8 +126,9 @@
         </div>
 
         <div class="col-12">
+          <a href="/bots" class="btn btn-dark">Bots List</a>
           <button type="submit" class="btn btn-primary">Update</button>
-          <a href="/bots" class="btn btn-secondary">Back to Bots List</a>
+          <a href="/bots/{{ bot.id }}" class="btn btn-info">Details</a>
         </div>
       </form>
 
@@ -140,7 +141,7 @@
         </div>
       </div>
 
-      <div style="margin-top: 20px">
+      <div class="mt-4">
         <div
           id="result-card"
           class="alert alert-success"
@@ -149,7 +150,7 @@
         >
           <div class="card mt-4">
             <div id="result-value" class="card-body">
-              Bot update in progress...
+              Updating the bot...
             </div>
           </div>
         </div>

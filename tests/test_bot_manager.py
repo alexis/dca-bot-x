@@ -1,16 +1,22 @@
-import pytest
 import asyncio
+from typing import Type, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from uuid import uuid4
+
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.models import Bot, Base
+
+from app.models import Base, Bot
+from app.services.bot_events_handler import BotEventsHandler
 from app.services.bot_manager import BotManager
-from uuid import uuid4
+from app.services.trading_service import TradingService
+
 
 @pytest.fixture
 def bot_manager():
-    """Create a fresh BotManager instance for each test"""
-    return BotManager(MockTradingService, MockBotEventsHandler)
+    return BotManager(cast(Type[TradingService], MockTradingService),
+                      cast(Type[BotEventsHandler], MockBotEventsHandler))
 
 class MockTradingService:
     def __init__(self, **kwargs):

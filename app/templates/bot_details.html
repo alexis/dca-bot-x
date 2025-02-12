@@ -12,25 +12,59 @@
   <body>
     <div class="container mt-4" style="max-width: 800px">
       <h1 class="text-center mb-4">Bot Details</h1>
-      
+
       <div class="card">
         <div class="card-body">
           <h4 class="card-title">{{ bot.name }}</h4>
           <p class="card-text">
-            <strong>Is Active:</strong> {{ bot.is_active }}<br />
-            <strong>Symbol:</strong> {{ bot.symbol }}<br />
-            <strong>Amount:</strong> {{ bot.amount }}<br />
-            <strong>Grid Length (%):</strong> {{ bot.grid_length }}<br />
-            <strong>First Order Offset (%):</strong> {{ bot.first_order_offset }}<br />
-            <strong>Number of Orders:</strong> {{ bot.num_orders }}<br />
-            <strong>Next Order Volume:</strong> {{ bot.next_order_volume }}<br />
-            <strong>Price Change Percentage (%):</strong> {{ bot.price_change_percentage }}<br />
-            <strong>Profit Percentage (%):</strong> {{ bot.profit_percentage }}<br />
-            <strong>Created At:</strong> {{ bot.created_at }}<br />
-            <strong>Updated At:</strong> {{ bot.updated_at }}<br />
+            <strong>Created At:</strong> {{ bot.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br />
+            <strong>Current Cycle Profit:</strong> {{ current_cycle.profit() if current_cycle else 0 }} USDT<br />
+            <strong>Total Profit:</strong> TODO <br />
           </p>
-          <a href="/bots" class="btn btn-secondary">Back to Bots List</a>
         </div>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-body">
+          <h4 class="card-title">Next Cycle Settings</h4>
+          <p class="card-text">
+            <strong>Starting automatically:</strong> {{ bot.is_active }}<br />
+            <strong>Symbol:</strong> {{ bot.symbol }}<br />
+            <strong>Amount:</strong> {{ bot.amount | round(2)}} USDT<br />
+            <strong>Grid Length:</strong> {{ bot.grid_length }}%<br />
+            <strong>First Order Offset:</strong> {{ bot.first_order_offset }}%<br />
+            <strong>Number of Orders:</strong> {{ bot.num_orders }}<br />
+            <strong>Next Order Volume:</strong> {{ bot.next_order_volume }}%<br />
+            <strong>Price Change Percentage:</strong> {{ bot.price_change_percentage }}%<br />
+            <strong>Profit Percentage:</strong> {{ bot.profit_percentage }}%<br />
+            <strong>Updated At:</strong> {{ bot.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}<br />
+          </p>
+        </div>
+      </div>
+
+      {% if current_cycle %}
+      <div class="card mt-4">
+        <div class="card-body">
+          <h4 class="card-title">Current Cycle Settings</h4>
+          <p class="card-text">
+            <strong>Status:</strong> {{ current_cycle.status }}<br />
+            <strong>Symbol:</strong> {{ current_cycle.symbol }}<br />
+            <strong>Amount:</strong> {{ current_cycle.amount | round(2)}} USDT<br />
+            <strong>Grid Length:</strong> {{ current_cycle.grid_length }}%<br />
+            <strong>First Order Offset:</strong> {{ current_cycle.first_order_offset }}%<br />
+            <strong>Number of Orders:</strong> {{ current_cycle.num_orders }}<br />
+            <strong>Next Order Volume:</strong> {{ current_cycle.next_order_volume }}%<br />
+            <strong>Price Change Percentage:</strong> {{ current_cycle.price_change_percentage }}%<br />
+            <strong>Profit Percentage:</strong> {{ current_cycle.profit_percentage }}%<br />
+            <strong>Started At:</strong> {{ current_cycle.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br />
+          </p>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="mt-4">
+        <a href="/bots" class="btn btn-dark">Bots List</a>
+        <a href="/bots/{{ bot.id }}/dashboard" class="btn btn-primary">Bot Dashboard</a>
       </div>
     </div>
   

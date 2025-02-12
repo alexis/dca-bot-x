@@ -335,3 +335,8 @@ class TradingService:
                 logging.error(f"Failed to query order {order.exchange_order_id}: {e}")
 
         return orders
+
+    def profit(self):
+        self.cycle = bot.trading_cycles.filter(
+            TradingCycle.status == CycleStatusType.COMPLETED
+        ).first()
