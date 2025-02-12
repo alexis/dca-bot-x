@@ -2,7 +2,6 @@ from enum import Enum
 
 class ExchangeType(str, Enum):
     BINANCE = "BINANCE"
-    # Add other exchanges as needed
 
 class SymbolType(str, Enum):
     BTC_USDT = "BTCUSDT"
@@ -11,8 +10,8 @@ class SymbolType(str, Enum):
     # Add other trading pairs as needed
 
 class BotStatusType(str, Enum):
-    ACTIVE = "ACTIVE"
-    PAUSED = "PAUSED"
+    RUNNING = "RUNNING"
+    LAST_CYCLE = "LAST_CYCLE"
     STOPPED = "STOPPED"
 
 class CycleStatusType(str, Enum):

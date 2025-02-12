@@ -2,7 +2,7 @@ from decimal import Decimal, ROUND_DOWN
 from typing import List, Dict
 from binance.spot import Spot
 from ..models import Bot, TradingCycle, Order
-from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, CycleStatusType
+from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, CycleStatusType, BotStatusType
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import logging
@@ -25,15 +25,21 @@ class TradingService:
     def launch(self):
         """Launch a new trading cycle for the bot"""
 
-        if not self.bot.is_active:
+        if not self.bot.is_active:  # bot was stopped
             return
 
-        if self.cycle:
+        elif self.cycle:  # bot is active and there's an active cycle => restore operations after interuption
             self.query_open_orders()
-
             if self.cycle.orders.count() == 0:
                 self.place_grid_orders()
-        else:
+
+        elif self.bot.status == BotStatusType.LAST_CYCLE:  # bot is active, it's last status was completed, it should be stopped now
+            self.bot.status = BotStatusType.STOPPED
+            self.bot.is_active = False
+            self.db.commit()
+            return
+
+        else:  # bot should automatically start a new cycle
             self.start_new_cycle()
 
     def calculate_grid_prices(self, market_price: Decimal) -> List[Decimal]:
