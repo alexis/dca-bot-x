@@ -71,7 +71,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await bot_manager.release_all()
+    bot_manager.release_all()
 
 
 @app.get("/")

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Type
+from typing import Type, Optional
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ class BotManager:
         self,
         trading_service_class: Type[TradingService] = TradingService,
         events_handler_class: Type[BotEventsHandler] = BotEventsHandler,
-        db: Session = None
+        db: Optional[Session] = None
     ):
         self.trading_service_class = trading_service_class
         self.events_handler_class = events_handler_class
@@ -43,14 +43,12 @@ class BotManager:
     async def install_bots(self, bots):
         await asyncio.gather(*(self.install(bot) for bot in bots))
 
-    async def release(self, bot):
+    def release(self, bot):
         ws_manager = self.events_handlers[bot.id]
         ws_manager.ws_client.stop()
         del self.events_handlers[bot.id]
         self.active_bots.remove(bot)
 
-    async def release_bots(self, bots):
-        await asyncio.gather(*(self.release(bot) for bot in bots))
-
-    async def release_all(self):
-        await self.release_bots(self.active_bots)
+    def release_all(self):
+        for bot in reversed(self.active_bots):
+            self.release(bot)
