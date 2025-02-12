@@ -94,7 +94,7 @@ def test_bot(db_session):
         next_order_volume=Decimal('5'),
         profit_percentage=Decimal('1'),
         price_change_percentage=Decimal('1'),
-        status=BotStatusType.ACTIVE,
+        status=BotStatusType.RUNNING,
         is_active=True,
         upper_price_limit=Decimal('30000'),
         api_key="test_api_key",
