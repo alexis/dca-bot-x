@@ -18,6 +18,8 @@ from .database import engine, get_db
 from .models import Base, Bot
 from .routes import bot
 from .services.bot_manager import BotManager
+from .services.trading_service import TradingService
+from .services.bot_events_handler import BotEventsHandler
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -25,7 +27,7 @@ Base.metadata.create_all(bind=engine)
 logging.basicConfig(level=logging.DEBUG)
 
 app = FastAPI()
-bot_manager = BotManager()
+bot_manager = BotManager(TradingService, BotEventsHandler)
 
 ENV = os.getenv("ENV", "development")
 

@@ -9,29 +9,28 @@ from .trading_service import TradingService
 
 
 class BotManager:
-    def __init__(self):
-        self.events_handlers = {}
+    def __init__(self, trading_service_class, events_handler_class):
+        self.trading_service_class = trading_service_class
+        self.events_handler_class = events_handler_class
         self.active_bots = []
+        self.events_handlers = {}
+
 
     async def install(self, bot: Bot, db: Session = None):
         if not bot.is_active:
             return
 
         db = db or next(get_db())
-
-        bot = db.merge(bot)
-
+        
         self.active_bots.append(bot)
-
-        trading_service = TradingService(db=db, bot=bot)
+        trading_service = self.trading_service_class(db=db, bot=bot)
         trading_service.launch()
         listen_key = trading_service.client.new_listen_key()["listenKey"]
 
-        events_handler = BotEventsHandler(
+        events_handler = self.events_handler_class(
             bot=bot, trading_service=trading_service, db=db, listen_key=listen_key
         )
         self.events_handlers[bot.id] = events_handler
-
         await events_handler.start()
 
     async def release(self, bot):
