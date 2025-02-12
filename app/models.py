@@ -56,8 +56,6 @@ class TradingCycle(Base):
 
     def profit(self):
         if self.status == CycleStatusType.COMPLETED:
-            session = Session.object_session(self)
-
             buy_orders = self.orders.filter(
                 Order.side == SideType.BUY,
                 Order.status.in_([OrderStatusType.FILLED, OrderStatusType.PARTIALLY_FILLED])

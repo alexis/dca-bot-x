@@ -336,7 +336,12 @@ class TradingService:
 
         return orders
 
-    def profit(self):
-        self.cycle = bot.trading_cycles.filter(
+    def old_cycles_profit(self):
+        return sum(cycle.profit() for cycle in self.old_cycles())
+
+    def old_cycles(self):
+        cycles = self.bot.trading_cycles.filter(
             TradingCycle.status == CycleStatusType.COMPLETED
-        ).first()
+        )
+
+        return cycles

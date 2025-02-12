@@ -18,8 +18,8 @@
           <h4 class="card-title">{{ bot.name }}</h4>
           <p class="card-text">
             <strong>Created At:</strong> {{ bot.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br />
-            <strong>Current Cycle Profit:</strong> {{ current_cycle.profit() if current_cycle else 0 }} USDT<br />
-            <strong>Total Profit:</strong> TODO <br />
+            <strong>Number of Completed Cycles:</strong> {{ trading_service.old_cycles().count() }}<br />
+            <strong>Taken Profit (Completed Cycles):</strong> {{ trading_service.old_cycles_profit() }} USDT<br />
           </p>
         </div>
       </div>

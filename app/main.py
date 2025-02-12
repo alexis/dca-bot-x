@@ -20,6 +20,7 @@ from .routes import bot
 from .services.bot_manager import BotManager
 from .services.trading_service import TradingService
 from .services.bot_events_handler import BotEventsHandler
+from app.services import trading_service
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -87,12 +88,15 @@ async def list_bots(request: Request, db: Session = Depends(get_db)):
 @app.get("/bots/{bot_id}", response_class=HTMLResponse)
 async def bot_detail(request: Request, bot_id: str, db: Session = Depends(get_db)):
     bot_obj = db.query(Bot).filter(Bot.id == bot_id).first()
-    current_cycle = TradingService(bot=bot_obj, db=db).cycle
+    ts_obj = TradingService(bot=bot_obj, db=db)
+    cycle_obj = ts_obj.cycle
+
     if not bot_obj:
         raise HTTPException(status_code=404, detail="Bot not found")
 
     return templates.TemplateResponse("bot_details.html", {"request": request, "bot": bot_obj,
-                                                           "current_cycle": current_cycle })
+                                                           "current_cycle": cycle_obj,
+                                                           "trading_service": ts_obj })
 
 @app.get("/bots/{bot_id}/dashboard", response_class=HTMLResponse)
 async def bot_dashboard(request: Request, bot_id: str, db: Session = Depends(get_db)):
