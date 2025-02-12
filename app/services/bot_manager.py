@@ -14,17 +14,19 @@ class BotManager:
         self,
         trading_service_class: Type[TradingService] = TradingService,
         events_handler_class: Type[BotEventsHandler] = BotEventsHandler,
+        db: Session = None
     ):
         self.trading_service_class = trading_service_class
         self.events_handler_class = events_handler_class
+        self.db = db
         self.active_bots = []
         self.events_handlers = {}
 
-    async def install(self, bot: Bot, db: Session = None):
+    async def install(self, bot: Bot):
         if not bot.is_active:
             return
 
-        db = db or next(get_db())
+        db = self.db or next(get_db())
         bot = db.merge(bot)
 
         self.active_bots.append(bot)

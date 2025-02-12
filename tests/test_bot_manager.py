@@ -14,9 +14,10 @@ from app.services.trading_service import TradingService
 
 
 @pytest.fixture
-def bot_manager():
+def bot_manager(db_session):
     return BotManager(cast(Type[TradingService], MockTradingService),
-                      cast(Type[BotEventsHandler], MockBotEventsHandler))
+                      cast(Type[BotEventsHandler], MockBotEventsHandler),
+                      db=db_session)
 
 class MockTradingService:
     def __init__(self, **kwargs):
