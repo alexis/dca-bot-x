@@ -24,9 +24,10 @@ client = Spot(
     base_url='https://testnet.binance.vision' if os.getenv("BINANCE_TESTNET") == '1' else 'https://api.binance.com'
 )
 
-bot = db.query(Bot).first()
+bots = db.query(Bot)
+bot = bots.first()
 trading_service = TradingService(db=db, bot=bot)
-cycle = db.query(TradingCycle).first()
+cycle = trading_service.cycle
 
 # Create an IPython shell context
 context = {
@@ -46,6 +47,7 @@ context = {
     'TimeInForceType': TimeInForceType,
     'OrderType': OrderType,
     'CycleStatusType': CycleStatusType,
+    'bots': list(bots),
     'bot': bot,
     'cycle': cycle,
 }
