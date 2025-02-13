@@ -5,6 +5,7 @@ import os
 from decimal import Decimal
 from typing import List, Optional
 
+from app.enums import BotStatusType
 from binance.spot import Spot
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
@@ -126,7 +127,6 @@ async def update_bot(
 
     try:
         bot_obj.name = name
-        #bot_obj.is_active = is_active # XXX
         bot_obj.symbol = symbol
         bot_obj.amount = amount
         bot_obj.grid_length = grid_length
@@ -136,7 +136,15 @@ async def update_bot(
         bot_obj.price_change_percentage = price_change_percentage
         bot_obj.upper_price_limit = 0 # XXX
 
-        db.commit()
+        if bot_obj.is_active and not is_active:
+            bot_obj.status = BotStatusType.LAST_CYCLE
+            db.commit()
+        elif not bot_obj.is_active and is_active:
+            bot_obj.status = BotStatusType.RUNNING
+            bot_obj.is_active = True
+            db.commit()
+            await bot_manager.install(bot_obj)
+
         return "Bot updated."
     except Exception as e:
         logging.error(f"Error placing order: {e}")
@@ -156,7 +164,7 @@ async def create_bot(
             api_key=api_key,
             api_secret=api_secret,
             is_active=False,
-            status='STOPPED',
+            status=BotStatusType.STOPPED,
             exchange="binance",
             symbol="BTCUSDT",              # default trading pair
             amount=Decimal("100"),         # default amount (e.g., investment capital)

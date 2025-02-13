@@ -31,8 +31,9 @@ class BotManager:
 
         self.active_bots.append(bot)
         trading_service = self.trading_service_class(db=db, bot=bot)
-        trading_service.launch()
         listen_key = trading_service.client.new_listen_key()["listenKey"]
+
+        trading_service.launch(lambda bot: self.release(bot))
 
         events_handler = self.events_handler_class(
             bot=bot, trading_service=trading_service, db=db, listen_key=listen_key

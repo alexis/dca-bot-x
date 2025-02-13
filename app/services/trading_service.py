@@ -1,5 +1,5 @@
 from decimal import Decimal, ROUND_DOWN
-from typing import List, Dict
+from typing import List, Callable
 from binance.spot import Spot
 from ..models import Bot, TradingCycle, Order
 from ..enums import OrderType, SideType, TimeInForceType, OrderStatusType, CycleStatusType, BotStatusType
@@ -22,7 +22,7 @@ class TradingService:
             TradingCycle.status == CycleStatusType.ACTIVE
         ).first()
 
-    def launch(self):
+    def launch(self, on_stop: Callable[['Bot'], None]):
         """Launch a new trading cycle for the bot"""
 
         if not self.bot.is_active:  # bot was stopped
@@ -33,10 +33,11 @@ class TradingService:
             if self.cycle.orders.count() == 0:
                 self.place_grid_orders()
 
-        elif self.bot.status == BotStatusType.LAST_CYCLE:  # bot is active, it's last status was completed, it should be stopped now
+        elif self.bot.status == BotStatusType.LAST_CYCLE:  # the bot is active, it's last cycle was completed, it should be stopped now
             self.bot.status = BotStatusType.STOPPED
             self.bot.is_active = False
             self.db.commit()
+            on_stop(self.bot)
             return
 
         else:  # bot should automatically start a new cycle

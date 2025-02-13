@@ -30,7 +30,7 @@ INSERT INTO bots (
     5.0,                   -- profit_percentage
     1.0,                   -- price_change_percentage
     30000.0,              -- upper_price_limit
-    'ACTIVE',             -- status
+    'RUNNING',             -- status
     true,                 -- is_active
     'api_key',       -- api_key
     'api_secret',    -- api_secret
